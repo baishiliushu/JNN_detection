@@ -1,6 +1,6 @@
 from train import Trainer
 from test import Tester
-
+from config import ConfigInit
 
 def train():
     Trainer.train()
@@ -18,4 +18,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config_obj = ConfigInit()
     main()

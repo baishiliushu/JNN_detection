@@ -1,5 +1,9 @@
+import os
+
+
 class Config:
 
+    base_project_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + ".")
     ####### Datasets
     dataset = "coco"  # {VOC, coco, coco_split, other}
     # paths to [other] datasets
@@ -29,7 +33,7 @@ class Config:
 
     continue_training = False
     log_of_train = False
-	letter_box_for_query_img = False  # if enabled, g-box need changed
+    letter_box_for_query_img = False  # if enabled, g-box need changed
     thresh = .6
 
     jitter = 0.3
@@ -41,8 +45,9 @@ class Config:
     strides = 32
 
     ####### Model save/load path
-    best_model_path = "check_points/model_best"
-    model_path = "check_points/model_last"
+    model_father_path = base_project_dir + "/check_points/"  # check_points/
+    best_model_path = model_father_path + "model_best"
+    model_path = model_father_path + "model_last"
     model_endless = ".pt"
     anchors = [[1.3221, 1.73145], [3.19275, 4.00944], [5.05587, 8.09892], [9.47112, 4.84053], [11.2364, 10.0071]]
 
@@ -51,11 +56,18 @@ class Config:
     nms_thresh = 0.45
 
     # path to mAP repository
-    mAP_path = "/home/leon/opt-exprements/expments/JNN_detection/mAP/"
+    mAP_path = base_project_dir + "/mAP/"
 
     ####### Loss
     object_scale = 5
     noobject_scale = 1
     class_scale = 1
     coord_scale = 1
+
+
+class ConfigInit:
+    def __init__(self):
+        if not os.path.exists(Config.model_father_path):
+            os.mkdir(Config.model_father_path)
+
 

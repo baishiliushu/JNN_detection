@@ -19,8 +19,7 @@ from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
 from utils.utils import letterbox_image
 from utils.utils import network_choice
-
-
+from utils.utils import logg_init_obj
 
 def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=True):
     q_im = Image.open(os.path.join(test_img_top_path, file_name) + file_endless)
@@ -156,7 +155,7 @@ class Tester:
         if model_type == "darknet19":
             middle_name = "coco_voc199epoch/"
         #
-        model_path = "/home/leon/opt-exprements/expments/JNN_detection/check_points/{}model_best.pt".format(middle_name)
+        #model_path = "/home/leon/opt-exprements/expments/JNN_detection/check_points/{}model_best.pt".format(middle_name)
         # model_path = Config.best_model_path + Config.model_endless
 
         model = network_choice(model_type)  # DarkJNN()
@@ -179,7 +178,7 @@ class Tester:
                                           letterbox=False)
 
         #test_img_top_path = "/home/leon/opt-exprements/expments/data_test/template_match/match_data/{}/".format("dir-mosaic")  # q_name
-		search_path = os.path.join(search_path, q_name)
+        search_path = os.path.join(search_path, q_name)
         sence_imgs = os.listdir(search_path)
         # hist_option = False
         #conf = 0.3  # Config.conf_thresh
@@ -245,6 +244,22 @@ class Tester:
                                                                                                   loss_sample_count,
                                                                                                   len(sence_imgs),
                                                                                                   pet_found))
+
+
+    @staticmethod
+    def test_on_cross_cats(model, query_cat_name, query_base_path, search_base_path, rst_base_path, hist_flag, conf, nms):
+        if Config.log_of_train:
+            logg_init_obj("log/console_train_{}.log".format(time.time()))
+        if os.path.isfile(model):
+            print("[ERR]model tested NOT exist {}".format(model))
+            return
+
+        model = network_choice()  # DarkJNN()
+        checkpoint = torch.load()
+        model.load_state_dict(checkpoint['model'])
+        model.cuda()
+        model.eval()
+        # todo: forward -> rst-total-img , [rst-roi-imgs]
 
     @staticmethod
     def test_one_COCO():

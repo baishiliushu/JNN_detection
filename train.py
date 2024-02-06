@@ -1,4 +1,5 @@
 import math
+import os.path
 import time
 import matplotlib.pyplot as plt
 
@@ -63,15 +64,17 @@ class Trainer:
                               momentum=Config.momentum, weight_decay=Config.weight_decay)
 
         starting_ep = 0
-
         if Config.continue_training:
             last_model = Config.model_path + Config.model_endless
-            checkpoint = torch.load(last_model)
-            model.load_state_dict(checkpoint['model'])
-            starting_ep = checkpoint['epoch'] + 1
-            lr = checkpoint['lr']
-            Trainer.adjust_learning_rate(optimizer, lr)
-            print("Continue training]start epoch is : ", starting_ep)
+            if os.path.isfile(last_model):
+                checkpoint = torch.load(last_model)
+                model.load_state_dict(checkpoint['model'])
+                starting_ep = checkpoint['epoch'] + 1
+                lr = checkpoint['lr']
+                Trainer.adjust_learning_rate(optimizer, lr)
+                print("[INFO]Continue training start epoch is : ", starting_ep)
+            else:
+                print("[WARN]Cannot Continue-training, NOT found file {}".format(last_model))
 
         model.cuda()
         print("model convert into cuda.")

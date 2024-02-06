@@ -1,11 +1,12 @@
 from test import Tester
+from config import ConfigInit
 import argparse
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model_path", type=str, default="checkpoints/model_last.pt",
+    parser.add_argument("--model_path", type=str, default="check_points/model_last.pt",
                         help="path to model file")
     parser.add_argument("--test_img_top_path", type=str,
                         default="/home/leon/opt-exprements/expments/data_test/template_match/template_data/my_test_data/",
@@ -16,10 +17,10 @@ def parse_args():
                         help="father path to match image path, will add the q_name to gen final total dirname")
     parser.add_argument("--hist_option", type=bool, default=False, help="using hist preprocess when True")
     parser.add_argument("--rst_path", type=str,
-                        default='/home/leon/opt-exprements/expments/data_test/template_match/mobile_v2_voc_e2',
+                        default='/home/leon/opt-exprements/expments/data_test/template_match/tt',
                         help="father path of result, will  add the q_name and hist_option to gen final total dirname")
     parser.add_argument("--conf", type=str, default="0.3", help="conf")
-    parser.add_argument("--nms", type=str, default="0.4", help="conf")
+    parser.add_argument("--nms", type=str, default="0.1", help="nms")
     args = parser.parse_args()
     return args
 
@@ -33,4 +34,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config_obj = ConfigInit()
     main()

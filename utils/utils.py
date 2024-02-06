@@ -34,6 +34,7 @@ def judge_pillow_image_is_wrong(image_input):
 
 
 def network_choice(handle_choice=None):
+    # if using default None ,will using the Config.network_type
     net = DarkJNN()
     net_name = "darknet"
     handle_choice = Config.network_type if handle_choice is None else handle_choice
