@@ -13,7 +13,7 @@ from model.darknet19 import Darknet19
 from model.darknet19 import conv_bn_leaky
 from loss.loss import build_target, yolo_loss
 from config import Config
-
+import math
 
 class ReorgLayer(nn.Module):
     def __init__(self, stride=2):
@@ -72,7 +72,7 @@ class DarkJNN(nn.Module):
 
         self.reorg = ReorgLayer()
 
-    def forward(self, query, target, target_boxes, num_boxes=None, training=False):
+    def forward(self, query, target, target_boxes=[], num_boxes=None, training=False):
 
         output = self.conv0(target)
         output = self.conv1(output)
@@ -125,9 +125,13 @@ class DarkJNN(nn.Module):
         xy_pred = torch.sigmoid(output[:, :, 0:2])
         conf_pred = torch.sigmoid(output[:, :, 4:5])
         hw_pred = torch.exp(output[:, :, 2:4])
-        delta_pred = torch.cat([xy_pred, hw_pred], dim=-1)
+        delta_pred = torch.cat([xy_pred, hw_pred], dim=2)   # dim=-1 NPU not supported
 
         if training:
+            if torch.isnan(xy_pred).all() or torch.isinf(xy_pred).all():
+                print("[ERR] forward xy_pred is nan")
+            if torch.isnan(hw_pred).all() or torch.isinf(hw_pred).all():
+                print("[ERR] forward hw_pred is nan")
             output_variable = (delta_pred, conf_pred)
             output_data = [v.data for v in output_variable]
             gt_data = (target_boxes, num_boxes)
@@ -135,7 +139,10 @@ class DarkJNN(nn.Module):
 
             target_variable = [Variable(v) for v in target_data]
             box_loss, iou_loss = yolo_loss(output_variable, target_variable)
-
+            if torch.isnan(box_loss).all() or torch.isinf(box_loss).all():
+                print("[ERR] forward {box_loss} is nan")
+            if torch.isnan(iou_loss).all() or torch.isinf(iou_loss).all():
+                print("[ERR] forward {iou_loss} is nan")
             return box_loss, iou_loss
 
         return delta_pred, conf_pred

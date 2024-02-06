@@ -1,3 +1,4 @@
+import math
 import time
 import matplotlib.pyplot as plt
 
@@ -11,8 +12,12 @@ from dataloaders.datasetJNN import DatasetJNN
 from dataloaders.datasetJNN_VOC import DatasetJNN_VOC
 from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
-from model.darkJNN import DarkJNN
+
 from utils.utils import Utils
+from utils.utils import logg_init_obj
+from utils.utils import network_choice
+from utils.utils import judge_tensor_is_zero
+
 from config import Config
 
 
@@ -20,9 +25,9 @@ class Trainer:
 
     @staticmethod
     def train():
-
+        if Config.log_of_train:
+            logg_init_obj("log/console_train_{}.log".format(time.time()))
         torch.cuda.manual_seed(123)
-
         print("Training process initialized...")
 
         if Config.dataset == "VOC":
@@ -50,8 +55,8 @@ class Trainer:
         print("batch:  ", Config.batch_size)
         print("epochs: ", Config.epochs)
 
-        model = DarkJNN()
-
+        model = network_choice()
+        print("DEV-BRANCH MARK loaded net :\n{}".format(model))
         lr = Config.lr
 
         optimizer = optim.SGD(model.parameters(), lr=lr,
@@ -60,16 +65,18 @@ class Trainer:
         starting_ep = 0
 
         if Config.continue_training:
-            checkpoint = torch.load(Config.model_path)
+            last_model = Config.model_path + Config.model_endless
+            checkpoint = torch.load(last_model)
             model.load_state_dict(checkpoint['model'])
             starting_ep = checkpoint['epoch'] + 1
             lr = checkpoint['lr']
             Trainer.adjust_learning_rate(optimizer, lr)
-            print("starting epoch: ", starting_ep)
+            print("Continue training]start epoch is : ", starting_ep)
 
         model.cuda()
+        print("model convert into cuda.")
         model.train()
-
+        print("model recall train().")
         counter = []
         loss_history = []
 
@@ -78,7 +85,7 @@ class Trainer:
         break_counter = 0  # break after 20 epochs without loss improvement
 
         for epoch in range(starting_ep, Config.epochs):
-
+            print("##################NO.{} EPOCH [{},{})####################".format(epoch, starting_ep, Config.epochs))
             start_time = time.time()
 
             average_model_time = 0
@@ -88,6 +95,7 @@ class Trainer:
             average_loc_loss = 0
             average_conf_loss = 0
 
+            print('current learning rate is {}'.format(lr))
             if epoch in Config.decay_lrs:
                 lr = Config.decay_lrs[epoch]
                 Trainer.adjust_learning_rate(optimizer, lr)
@@ -95,15 +103,31 @@ class Trainer:
 
             for i, data in enumerate(train_dataloader, 0):
 
-                #if (i % 3000 == 0):
-                #    print(str(i) + "/" + str(len(train_dataloader)))  # progress
+                if (i % 3000 == 0):
+                   print(str(i) + "/" + str(len(train_dataloader)))  # progress
 
                 img0, img1, targets, num_obj = data
-                img0, img1, targets, num_obj = Variable(img0).cuda(), Variable(img1).cuda(), targets.cuda(), num_obj.cuda()
 
+                img0, img1, targets, num_obj = Variable(img0).cuda(), Variable(img1).cuda(), targets.cuda(), num_obj.cuda()
+                if judge_tensor_is_zero(targets):
+                    print("tensor data targets is all zero.")
+                    continue
+                if judge_tensor_is_zero(img0):
+                    print("tensor data img0 is all zero.")
+                    continue
+                if judge_tensor_is_zero(img1):
+                    print("tensor data img1 is all zero.")
+                    continue
                 model_timer = time.time()
                 loc_l, conf_l = model(img0, img1, targets, num_obj, training=True)
-                loss = loc_l.mean() + conf_l.mean()
+                # loss = loc_l.mean() + conf_l.mean()
+                loc_l_mean_handle = (loc_l / loc_l.numel()).sum()
+                conf_l_mean_handle = (conf_l / conf_l.numel()).sum()
+                loss = loc_l_mean_handle + conf_l_mean_handle
+                if math.isnan(loc_l_mean_handle):
+                    print("[ERR] loc_l_mean_handle is nan:{}".format(loc_l_mean_handle))
+                if math.isnan(conf_l_mean_handle):
+                    print("[ERR] conf_l_mean_handle is nan:{}".format(conf_l_mean_handle))
                 model_timer = time.time() - model_timer
                 average_model_time += model_timer
 
@@ -117,16 +141,20 @@ class Trainer:
                 average_epoch_loss += loss
                 average_loc_loss += loc_l
                 average_conf_loss += conf_l
+                if (i % 100 == 0):
+                   print("[INFO] data batch {} : loss is {}".format(i, loss))  # progress
+
 
             end_time = time.time() - start_time
             print("time: ", end_time)
 
             others_timer = end_time - average_model_time - average_optim_time
-            print("data+ time: ", others_timer)
-            print("model time: ", average_model_time)
-            print("optim time: ", average_optim_time)
-
+            print("data+ time: ", others_timer / 3600)
+            print("model time: ", average_model_time / 3600)
+            print("optim time: ", average_optim_time / 3600)
             average_epoch_loss = average_epoch_loss / i
+            if i == 0:
+                average_epoch_loss = average_epoch_loss / i + 1
 
             print("Epoch number {}\n Current loss {}\n".format(epoch, average_epoch_loss))
             counter.append(epoch)
@@ -144,7 +172,10 @@ class Trainer:
                     'epoch': epoch,
                     'loss': average_epoch_loss,
                     'lr': lr
-                }, save_name)
+                }, "{}_total{}".format(save_name, Config.model_endless))
+                torch.save({
+                    'model': model.state_dict(),
+                }, "{}{}".format(save_name, Config.model_endless))
 
             save_name = Config.model_path
             torch.save({
@@ -153,7 +184,10 @@ class Trainer:
                 'epoch': epoch,
                 'loss': average_epoch_loss,
                 'lr': lr
-            }, save_name)
+            }, "{}{}".format(save_name, Config.model_endless))
+            torch.save({
+                'model': model.state_dict(),
+            }, "{}_only_weight{}".format(save_name, Config.model_endless))
 
             print("")
             if break_counter >= 20:

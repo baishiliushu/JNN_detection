@@ -190,12 +190,16 @@ def generate_all_anchors(anchors, H, W):
     c_y = shift_y.float()
 
     centers = torch.cat([c_x.view(-1, 1), c_y.view(-1, 1)], dim=-1)  # tensor of shape (h * w, 2), (cx, cy)
+    centers_opt = centers.view(K, 1, 2)
+    centers_opt = centers_opt.expand(K, A, 2)
+    anchors_opt = anchors.view(1, A, 2)
+    anchors_opt = anchors_opt.expand(K, A, 2)
 
     # add anchors width and height to centers
     all_anchors = torch.cat([centers.view(K, 1, 2).expand(K, A, 2),
                              anchors.view(1, A, 2).expand(K, A, 2)], dim=-1)
 
-    all_anchors = all_anchors.view(-1, 4)
+    all_anchors_opted = all_anchors.view(-1, 4)
 
-    return all_anchors
+    return all_anchors_opted
 

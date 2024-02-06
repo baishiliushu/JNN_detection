@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 
 from config import Config
-from utils.utils import augment_img
+from utils.utils import augment_img, letterbox_image
 
 
 class DatasetJNN_VOC(Dataset):
@@ -89,8 +89,12 @@ class DatasetJNN_VOC(Dataset):
             boxes[:, 1::2] = np.clip(boxes[:, 1::2] / h, 0.001, 0.999)
 
             # resize images
-            q_im = q_im.resize((Config.imq_w, Config.imq_h))
-            t_im = t_im.resize((Config.im_w, Config.im_h))
+            if Config.letter_box_for_query_img:
+                q_im = letterbox_image(q_im, (Config.imq_w, Config.imq_h))
+                t_im = letterbox_image(t_im, (Config.im_w, Config.im_h))
+            else:
+                q_im = q_im.resize((Config.imq_w, Config.imq_h))
+                t_im = t_im.resize((Config.im_w, Config.im_h))
 
             # To float tensors
             q_im = torch.from_numpy(np.array(q_im)).float() / 255
@@ -107,7 +111,10 @@ class DatasetJNN_VOC(Dataset):
             w, h = t_im.size[0], t_im.size[1]
 
             # resize images
-            q_im = q_im.resize((Config.imq_w, Config.imq_h))
+            if Config.letter_box_for_query_img:
+                q_im = letterbox_image(q_im, (Config.imq_w, Config.imq_h))
+            else:
+                q_im = q_im.resize((Config.imq_w, Config.imq_h))
             t_im = t_im.resize((Config.im_w, Config.im_h))
 
             # To float tensors

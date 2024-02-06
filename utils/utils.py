@@ -3,8 +3,45 @@ import cv2
 import numpy as np
 from PIL import Image
 from torch.utils.data.dataloader import default_collate
-
+import sys
 from config import Config
+from model.darkJNN import DarkJNN
+from model.mobilev2JNN import mobilev2JNN
+import numbers
+
+def judge_tensor_is_zero(input_, dev="cuda:0"):
+    is_zero = False
+    tmp = torch.zeros(input_.shape, device=dev)
+    '''判断两个tensor是否相等'''
+    is_zero = torch.equal(tmp, input_)
+    return is_zero
+
+"""
+@:param handel_choice [None -> read from Config.network_type]
+"""
+
+
+def judge_pillow_image_is_wrong(image_input):
+    is_wrong = False
+    try:
+        if image_input.size[0] == 0 or (image_input.size[1] == 0):
+            is_wrong = True
+            print("[data] image is (0, 0), jump.")
+    except:
+        print("[ERR][data] input less size object")
+        is_wrong = True
+    return is_wrong
+
+
+def network_choice(handle_choice=None):
+    net = DarkJNN()
+    net_name = "darknet"
+    handle_choice = Config.network_type if handle_choice is None else handle_choice
+    if handle_choice == "mobile_net_v2":
+        net = mobilev2JNN()
+        net_name = handle_choice
+    print("choose net :{}".format(net_name))
+    return net
 
 
 class Utils:
@@ -41,6 +78,28 @@ class Utils:
             padded_boxes[i, :num_obj[i], :] = boxes[i]
 
         return torch.stack(im_dataq, 0), torch.stack(im_datat, 0), padded_boxes, torch.stack(num_obj, 0)
+
+
+class ConsoleLogger(object):
+
+    def __init__(self, filename="log/log.txt"):
+        self.terminal = sys.stdout
+        # self.err = sys.stderr
+        self.log = open(filename, "w")
+
+    def write(self, message):
+        self.log.write(message)
+        self.terminal.write(message)
+        # self.err.write(message)
+        self.log.flush()  # 缓冲区的内容及时更新到log文件中
+
+    def flush(self):
+        pass
+
+
+def logg_init_obj(filename="log.txt"):
+    sys.stdout = ConsoleLogger(filename=filename)
+
 
 def augment_img(img, boxes):
     """
@@ -141,6 +200,107 @@ def convert_color(img, source, dest):
     elif source == 'HSV' and dest == 'RGB':
         img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
     return img
+
+def our_center_crop(img, output_size):
+    if isinstance(output_size, numbers.Number):
+        output_size = (int(output_size), int(output_size))
+    w, h = img.size
+    th, tw = output_size
+    i = int(round((h - th) / 2.))
+    j = int(round((w - tw) / 2.))
+    return crop(img, i, j, th, tw)
+
+
+def our_resize(img, size, interpolation=Image.BILINEAR):
+    r"""Resize the input PIL Image to the given size.
+
+    Args:
+        img (PIL Image): Image to be resized.
+        size (sequence or int): Desired output size. If size is a sequence like
+            (h, w), the output size will be matched to this. If size is an int,
+            the smaller edge of the image will be matched to this number maintaing
+            the aspect ratio. i.e, if height > width, then image will be rescaled to
+            :math:`\left(\text{size} \times \frac{\text{height}}{\text{width}}, \text{size}\right)`
+        interpolation (int, optional): Desired interpolation. Default is
+            ``PIL.Image.BILINEAR``
+
+    Returns:
+        PIL Image: Resized image.
+    """
+    if isinstance(size, int):
+        w, h = img.size
+        if (w <= h and w == size) or (h <= w and h == size):
+            return img
+        if w < h:
+            ow = size
+            oh = int(size * h / w)
+            return img.resize((ow, oh), interpolation)
+        else:
+            oh = size
+            ow = int(size * w / h)
+            return img.resize((ow, oh), interpolation)
+    else:
+        return img.resize(size[::-1], interpolation)
+
+
+def crop(img, i, j, h, w):
+    """Crop the given PIL Image.
+
+    Args:
+        img (PIL Image): Image to be cropped.
+        i (int): i in (i,j) i.e coordinates of the upper left corner.
+        j (int): j in (i,j) i.e coordinates of the upper left corner.
+        h (int): Height of the cropped image.
+        w (int): Width of the cropped image.
+
+    Returns:
+        PIL Image: Cropped image.
+    """
+    return img.crop((j, i, j + w, i + h))
+
+
+
+def resized_crop(img, i, j, h, w, size, interpolation=Image.BILINEAR):
+    """Crop the given PIL Image and resize it to desired size.
+
+    Notably used in :class:`~torchvision.transforms.RandomResizedCrop`.
+
+    Args:
+        img (PIL Image): Image to be cropped.
+        i (int): i in (i,j) i.e coordinates of the upper left corner
+        j (int): j in (i,j) i.e coordinates of the upper left corner
+        h (int): Height of the cropped image.
+        w (int): Width of the cropped image.
+        size (sequence or int): Desired output size. Same semantics as ``resize``.
+        interpolation (int, optional): Desired interpolation. Default is
+            ``PIL.Image.BILINEAR``.
+    Returns:
+        PIL Image: Cropped image.
+    """
+    img = crop(img, i, j, h, w)
+    img = our_resize(img, size, interpolation)
+    return img
+
+
+def letterbox_image(image, size, use_letterbox=True):
+    w, h = size
+    iw, ih = image.size
+    if use_letterbox:
+        '''resize image with unchanged aspect ratio using padding'''
+        scale = min(w/iw, h/ih)
+        nw = int(iw*scale)
+        nh = int(ih*scale)
+
+        image = image.resize((nw, nh), Image.BICUBIC)
+        new_image = Image.new('RGB', size, (0, 0, 0))  # 128, 128, 128
+        new_image.paste(image, ((w-nw)//2, (h-nh)//2))
+    else:
+        if h == w:
+            new_image = our_resize(image, h)
+        else:
+            new_image = our_resize(image, [h, w])
+        new_image = our_center_crop(new_image, [h, w])
+    return new_image
 
 
 def rand_scale(s):

@@ -10,8 +10,12 @@ def test():
     Tester.test()
 
 
-if __name__ == "__main__":
+def main():
     train()
-    test()
+    # test()
     #Tester.test_one_OL()
-    #Tester.test_one_COCO()
+    # Tester.test_one_COCO()
+
+
+if __name__ == "__main__":
+    main()

@@ -5,17 +5,45 @@ import torchvision.transforms as transforms
 import torchvision.datasets as dset
 
 import os
+import time
 import cv2
 import numpy as np
 from PIL import Image
-
+from PIL import ImageOps
 from config import Config
-from model.darkJNN import DarkJNN
+
 from model.decoder import decode
 from dataloaders.datasetJNN import DatasetJNN
 from dataloaders.datasetJNN_VOC import DatasetJNN_VOC
 from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
+from utils.utils import letterbox_image
+from utils.utils import network_choice
+
+
+
+def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=True):
+    q_im = Image.open(os.path.join(test_img_top_path, file_name) + file_endless)
+    if hist:
+        q_im = ImageOps.equalize(q_im, mask=None)
+    # q_im = q_im.resize((resize_w, resize_h))
+    if not letterbox:
+        q_im = q_im.resize((resize_w, resize_h))
+    else:
+        q_im = letterbox_image(q_im, (resize_w, resize_h))
+        #q_im = q_im.resize((resize_w, resize_h))
+
+    cv_q_img = np.array(q_im)
+    cv_q_img = cv_q_img[:, :, ::-1].copy()
+    # To float tensors
+    q_im = torch.from_numpy(np.array(q_im)).float() / 255
+    img0 = q_im.permute(2, 0, 1)
+    img0 = torch.unsqueeze(img0, 0)
+    return img0, cv_q_img
+
+
+def get_milliseconds_timestamp():
+    return int(time.time() * 1000)
 
 
 class Tester:
@@ -28,10 +56,10 @@ class Tester:
         Config.batch_size = 1
 
         #Config.model_path = "testmodel_last.pt"
-        Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit4/testmodel_last_split4.pt"
+        #Config.model_path = "/home/leon/opt-exprements/expments/JNN_detection/check_points/model_best.pt"
         print("mAP files output path: " + Config.mAP_path)
 
-        model_path = Config.model_path
+        model_path = Config.best_model_path + Config.model_endless
 
         print("model: ", model_path)
         print("conf: ", Config.conf_thresh)
@@ -53,7 +81,7 @@ class Tester:
 
         dataloader = DataLoader(dataset, shuffle=False, num_workers=0, batch_size=1)
 
-        model = DarkJNN()
+        model = network_choice()
 
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
@@ -115,17 +143,23 @@ class Tester:
                         f.write(detection_str)
                     f.close()
 
+
     @staticmethod
-    def test_one_OL():
+    def test_one_OL(model_path, test_img_top_path, q_name, search_path, hist_option, rst_path, conf, nums):
         """ Tests a a pair of images """
 
         print("testing one image...")
 
-        Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
+        #Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
+        model_type = "darknet19" # "no_config"
+        middle_name = ""
+        if model_type == "darknet19":
+            middle_name = "coco_voc199epoch/"
+        #
+        model_path = "/home/leon/opt-exprements/expments/JNN_detection/check_points/{}model_best.pt".format(middle_name)
+        # model_path = Config.best_model_path + Config.model_endless
 
-        model_path = Config.model_path
-
-        model = DarkJNN()
+        model = network_choice(model_type)  # DarkJNN()
 
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
@@ -135,49 +169,82 @@ class Tester:
 
         # (3m1, 3m6), (rbc1, rbc43), hp(33971473, 70609284), blizzard(1, 6), gen_electric(7, 31), warner(10, 18)
         # goodyear(13, 20), airhawk(12, 1), gap(34, 36), levis(14, 30)
-        q_name = "000000008629"
-        t_name = "000000209530"
-        q_im = Image.open("/home/mmv/Documents/3.datasets/coco/val2017/" + q_name + ".jpg")
-        t_im = Image.open("/home/mmv/Documents/3.datasets/coco/val2017/" + t_name + ".jpg")
 
-        w, h = t_im.size[0], t_im.size[1]
-        im_infos = (w, h, q_name, t_name)
+        # test_img_top_path = "/home/leon/opt-exprements/coco/val2017/"
+        # q_name = "000000008629" #
+        # t_name = "000000209530" #
+        # test_img_top_path = '/home/leon/opt-exprements/expments/data_test/template_match/template_data/my_test_data/'
+        # q_name = "xiaofangxiang"  # ['bin', 'miehuoqi', 'yaoshi', 'desk', 'yizi',  'shuiping']
+        img0, cv_q_img = preprocess_byPIL(test_img_top_path, "{}".format(q_name), Config.imq_w, Config.imq_h,
+                                          letterbox=False)
 
-        cv_im = np.array(t_im)
-        cv_im = cv_im[:, :, ::-1].copy()
+        #test_img_top_path = "/home/leon/opt-exprements/expments/data_test/template_match/match_data/{}/".format("dir-mosaic")  # q_name
+		search_path = os.path.join(search_path, q_name)
+        sence_imgs = os.listdir(search_path)
+        # hist_option = False
+        #conf = 0.3  # Config.conf_thresh
+        #nums = 0.4  # Config.nms_th17_1703669057750530.jpgresh
+        #rst_path = '/home/leon/opt-exprements/expments/data_test/template_match/own_rst_model_coco_e98'
+        if not os.path.exists(rst_path):
+            os.mkdir(rst_path)
+        rst_path = os.path.join(rst_path, q_name)
+        if hist_option:
+            rst_path = rst_path + "_histed"
+        if not os.path.exists(rst_path):
+            os.mkdir(rst_path)
+        fount_sample_count = 0
+        loss_sample_count = 0
+        for t_name in sence_imgs:
+            #t_name = "53_1703664893160227.jpg"  #
+            t_name = t_name.split(".jpg")[0]
+            img1, cv_im = preprocess_byPIL(search_path, t_name, Config.im_w, Config.im_h, hist=hist_option, letterbox=False)
 
-        q_im = q_im.resize((Config.imq_w, Config.imq_h))
-        t_im = t_im.resize((Config.im_w, Config.im_h))
+            im_infos = (cv_im.shape[1], cv_im.shape[0], q_name, t_name)
 
-        # To float tensors
-        q_im = torch.from_numpy(np.array(q_im)).float() / 255
-        t_im = torch.from_numpy(np.array(t_im)).float() / 255
-        img0 = q_im.permute(2, 0, 1)
-        img1 = t_im.permute(2, 0, 1)
-        img0 = torch.unsqueeze(img0, 0)
-        img1 = torch.unsqueeze(img1, 0)
+            with torch.no_grad():
+                test_t = get_milliseconds_timestamp()
+                img0, img1 = Variable(img0).cuda(), Variable(img1).cuda()
+                model_output = model(img0, img1, [])
+                print("model_output: {}".format(model_output))
+                im_info = {'width': im_infos[0], 'height': im_infos[1]}
+                output = [item[0].data for item in model_output]
+                detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nums)
+                test_t = get_milliseconds_timestamp() - test_t
+                print("detections: {}, using time:{}".format(detections, test_t))
+                highest_score = -1.0
+                if len(detections) > 0:
+                    fount_sample_count = fount_sample_count + 1
+                    for detection in detections:
+                        start_pt = (int(detection[0].item()), int(detection[1].item()))
+                        end_pt = (int(detection[2].item()), int(detection[3].item()))
+                        image = cv2.rectangle(cv_im, start_pt, end_pt, (0, 255, 0), 2)
+                        image = cv2.putText(image, "{:.4f}".format(detection[4].item()),
+                                            (int(detection[2].item() - 25), int(detection[3].item() + 3)),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.3, (100, 122, 222), 1, cv2.LINE_AA)
+                        if highest_score < detection[4].item():
+                            highest_score = detection[4].item()
+                        print(start_pt, end_pt)
 
-        with torch.no_grad():
-#
-            img0, img1 = Variable(img0).cuda(), Variable(img1).cuda()
+                    cv2.imwrite("{}.jpg".format(os.path.join(rst_path, t_name)), image)
 
-            model_output = model(img0, img1, [])
-
-            im_info = {'width': im_infos[0], 'height': im_infos[1]}
-            output = [item[0].data for item in model_output]
-
-            detections = decode(output, im_info, conf_threshold=Config.conf_thresh, nms_threshold=Config.nms_thresh)
-
-            if len(detections) > 0:
-
-                for detection in detections:
-                    start_pt = (int(detection[0].item()), int(detection[1].item()))
-                    end_pt = (int(detection[2].item()), int(detection[3].item()))
-                    image = cv2.rectangle(cv_im, start_pt, end_pt, (0, 255, 0), 3)
-                    print(start_pt, end_pt)
-
-                cv2.imshow("res", image)
-                cv2.waitKey()
+                else:
+                    loss_sample_count = loss_sample_count + 1
+                    print("under the conf {}, nums {}, sample data {} is no result output.".format(conf, nums, t_name))
+                cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(t_name, float(highest_score), conf, nums, ""),
+                           cv_im)
+                cv_q_show = cv2.resize(cv_q_img, (320, 320))
+                name_of_support_img = "{}-conf {}-nms {}".format(q_name, conf, nums)
+                cv2.namedWindow(name_of_support_img, 0)
+                cv2.moveWindow(name_of_support_img, 710, 100)
+                cv2.imshow(name_of_support_img, cv_q_show)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+        pet_found = float(fount_sample_count/len(sence_imgs))
+        pet_found = pet_found * 100
+        print("Finished!(found count {} + loss count {} ?= {} total. fount / total = {}%)".format(fount_sample_count,
+                                                                                                  loss_sample_count,
+                                                                                                  len(sence_imgs),
+                                                                                                  pet_found))
 
     @staticmethod
     def test_one_COCO():
@@ -185,10 +252,10 @@ class Tester:
 
         print("testing one image...")
 
-        Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
-        model_path = Config.model_path
+        #Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
+        model_path = Config.best_model_path + Config.model_endless
 
-        model = DarkJNN()
+        model = network_choice()  # DarkJNN()
 
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
@@ -202,8 +269,9 @@ class Tester:
         # goodyear(13, 20), airhawk(12, 1), gap(34, 36), levis(14, 30)
         q_name = "000000024144"
         t_name = "000000306700"
-        q_im = Image.open("/home/mmv/Documents/3.datasets/coco/val2017/" + q_name + ".jpg")
-        t_im = Image.open("/home/mmv/Documents/3.datasets/coco/val2017/" + t_name + ".jpg")
+        # /home/mmv/Documents/3.datasets / coco /
+        q_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + q_name + ".jpg")
+        t_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + t_name + ".jpg")
 
         # find image id and (first) annotation
         for id in coco_dataset.coco.imgs:

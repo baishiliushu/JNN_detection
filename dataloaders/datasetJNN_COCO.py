@@ -8,8 +8,8 @@ from torch.utils.data import Dataset
 import torchvision.datasets as dset
 
 from config import Config
-from utils.utils import augment_img
-
+from utils.utils import augment_img, letterbox_image
+from utils.utils import judge_pillow_image_is_wrong
 import time
 
 
@@ -40,8 +40,7 @@ class DatasetJNN_COCO(Dataset):
                 continue
             if not (random_class in self.unseen_classes):
                 break
-
-        # get query data
+        """get query data"""
         cat_img_set = self.coco_dataset.coco.catToImgs[cindex]
         qimg_id = cat_img_set[random.randint(0, len(cat_img_set) - 1)]
         qindex = self.coco_dataset.ids.index(qimg_id)
@@ -50,6 +49,8 @@ class DatasetJNN_COCO(Dataset):
         # q_im = Image.open(self.COCO_path + im_filename)
         # target = self.coco_dataset.coco.imgToAnns[qimg_id]
         q_im, target = self.coco_dataset[qindex]  # doing it manually seems to be faster
+        if judge_pillow_image_is_wrong(q_im):
+            print("[Err]query image is empty:{}".format(qindex))
 
         qboxes = []
         qcats = []
@@ -63,17 +64,28 @@ class DatasetJNN_COCO(Dataset):
         qbox = qboxes[query_random_index]
         # convert [x, y, w, h] to [x1, y1, x2, y2]
         qbox = [qbox[0], qbox[1], qbox[0] + qbox[2], qbox[1] + qbox[3]]
-        qcat = qcats[query_random_index]
+        qcat = qcats[query_random_index]   # elements in list are all same
+        q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
+        if judge_pillow_image_is_wrong(q_im):
+            print("[Err]query crop image is empty:{}".format(qindex))
 
         # get target data
         cat_img_set = self.coco_dataset.coco.catToImgs[cindex]
         timg_id = cat_img_set[random.randint(0, len(cat_img_set) - 1)]
         tindex = self.coco_dataset.ids.index(timg_id)
+        for i in range(0, 30):
+            if tindex != qindex:
+                break
+            else:
+                timg_id = cat_img_set[random.randint(0, len(cat_img_set) - 1)]
+                tindex = self.coco_dataset.ids.index(timg_id)
 
         # im_filename = self.coco_dataset.coco.imgs[timg_id]['file_name']
         # t_im = Image.open(self.COCO_path + im_filename)
         # target = self.coco_dataset.coco.imgToAnns[qimg_id]
         t_im, target = self.coco_dataset[tindex]
+        if judge_pillow_image_is_wrong(t_im):
+            print("[Err]target image is empty:{}".format(tindex))
 
         tboxes = []
         tcats = []
@@ -87,7 +99,7 @@ class DatasetJNN_COCO(Dataset):
         for box in tboxes:
             newbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
             boxes.append(newbox)
-        q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
+
 
         boxes = np.asarray(boxes, dtype=np.float32)
 
@@ -97,16 +109,24 @@ class DatasetJNN_COCO(Dataset):
         #    t_im = t_im.convert('RGB')
 
         if self.is_training:
-
+            # TODO: mosica
             t_im, boxes = augment_img(t_im, boxes)
 
             w, h = t_im.size[0], t_im.size[1]
             boxes[:, 0::2] = np.clip(boxes[:, 0::2] / w, 0.001, 0.999)
             boxes[:, 1::2] = np.clip(boxes[:, 1::2] / h, 0.001, 0.999)
-
+            # print("[data coco] boxes first clip :{}, {}]".format(boxes[:, 0::2], boxes[:, 1::2]))
             # resize images
             q_im = q_im.resize((Config.imq_w, Config.imq_h))
             t_im = t_im.resize((Config.im_w, Config.im_h))
+
+            ## todo: why donot resize boxes? varify.
+            # w_fixed, h_fixed = t_im.size[0], t_im.size[1]
+            # w_scale = w / w_fixed
+            # h_scale = h / h_fixed
+            # boxes[:, 0::2] = np.clip(boxes[:, 0::2] / w_scale, 0.001, 0.999)
+            # boxes[:, 1::2] = np.clip(boxes[:, 1::2] / h_scale, 0.001, 0.999)
+            ##
 
             # To float tensors
             q_im = torch.from_numpy(np.array(q_im)).float() / 255
