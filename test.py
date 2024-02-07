@@ -45,6 +45,70 @@ def get_milliseconds_timestamp():
     return int(time.time() * 1000)
 
 
+def copy_roi_and_save(cv_s_img, box_xywh):
+    image_roi = np.zeros((box_xywh[3], box_xywh[2], 3), dtype=np.uint8)
+
+    return image_roi
+
+
+def sorted_with_conf(t):
+    _, indices = torch.sort(t, descending=True, dim=0)  # sort along with cols-value-decrease
+    print(indices)
+    print(indices[:, -2])
+    idx = indices[:, -2]
+    t1 = t[idx[0]]  # top1
+    print(t1)
+    ls = []
+    for ix in idx:
+        ls.append(t[ix].unsqueeze(0))
+    out = torch.cat(ls)
+    return out
+
+
+def feed_forward_process(model, q_im, s_im, cv_q_img, cv_s_img, q_name, s_name, current_save_path, conf, nms, fount_sample_count=0, no_rst_count=0):
+    im_infos = (cv_s_img.shape[1], cv_s_img.shape[0], q_name, s_name)
+    with torch.no_grad():
+        test_t = get_milliseconds_timestamp()
+        tensor_q, tensor_s = Variable(q_im).cuda(), Variable(s_im).cuda()
+        model_output = model(tensor_q, tensor_s, [])
+        print("[INFO]lenth of model_output: {}".format(len(model_output)))
+        im_info = {'width': im_infos[0], 'height': im_infos[1]}
+        output = [item[0].data for item in model_output]
+        detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nms)
+        test_t = get_milliseconds_timestamp() - test_t
+        print("[INFO]detections: {}, using time:{}".format(detections, test_t))
+        highest_score = -1.0
+        if len(detections) > 0:
+            fount_sample_count = fount_sample_count + 1
+            # todo: sort
+            for detection in detections:
+                start_pt = (int(detection[0].item()), int(detection[1].item()))
+                end_pt = (int(detection[2].item()), int(detection[3].item()))
+                # todo: roi and save
+                image = cv2.rectangle(cv_s_img, start_pt, end_pt, (0, 255, 0), 2)
+                image = cv2.putText(image, "{:.4f}".format(detection[4].item()),
+                                    (int(detection[2].item() - 25), int(detection[3].item() + 3)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (100, 122, 222), 1, cv2.LINE_AA)
+                if highest_score < detection[4].item():
+                    highest_score = detection[4].item()
+                print(start_pt, end_pt)
+
+            cv2.imwrite("{}.jpg".format(os.path.join(current_save_path, s_name)), image)
+
+        else:
+            no_rst_count = no_rst_count + 1
+            print("[FALSE]under the conf {}, nums {}, sample data {} is no result output.".format(conf, nms, s_name))
+        cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(q_name, float(highest_score), conf, nms, ""), cv_s_img)
+        cv_q_show = cv2.resize(cv_q_img, (320, 320))
+        name_of_support_img = "{}-conf {}-nms {}".format(q_name, conf, nms)
+        cv2.namedWindow(name_of_support_img, 0)
+        cv2.moveWindow(name_of_support_img, 710, 100)
+        cv2.imshow(name_of_support_img, cv_q_show)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        return fount_sample_count, no_rst_count
+
+
 class Tester:
 
     @staticmethod
@@ -197,7 +261,6 @@ class Tester:
             #t_name = "53_1703664893160227.jpg"  #
             t_name = t_name.split(".jpg")[0]
             img1, cv_im = preprocess_byPIL(search_path, t_name, Config.im_w, Config.im_h, hist=hist_option, letterbox=False)
-
             im_infos = (cv_im.shape[1], cv_im.shape[0], q_name, t_name)
 
             with torch.no_grad():
@@ -247,7 +310,7 @@ class Tester:
 
 
     @staticmethod
-    def test_on_cross_cats(model, query_cat_name, query_base_path, search_base_path, rst_base_path, hist_flag, conf, nms):
+    def test_on_cross_cats(model, query_cat_name:str, query_base_path, search_base_path, rst_base_path, hist_flag=False, conf=0.3, nms=0.1):
         if Config.log_of_train:
             logg_init_obj("log/console_train_{}.log".format(time.time()))
         if os.path.isfile(model):
@@ -260,6 +323,42 @@ class Tester:
         model.cuda()
         model.eval()
         # todo: forward -> rst-total-img , [rst-roi-imgs]
+
+        if not (os.path.exists(search_base_path)):
+            print("[WARN]search top path not exist:{}".format(search_base_path))
+            exit(-1)
+        if not (os.path.exists(rst_base_path)):
+            print("[WARN]rst top path not exist:{}".format(rst_base_path))
+            os.mkdir(rst_base_path)
+        queries = list()
+        if isinstance(query_cat_name, list):
+            queries = query_cat_name
+        else:
+            queries.append(query_cat_name)
+        for q in queries:
+            img_q, cv_q_img = preprocess_byPIL(query_base_path, "{}".format(q), Config.imq_w, Config.imq_h,
+                                               letterbox=True)
+            for s in os.listdir(search_base_path):
+                search_path = os.path.join(search_base_path, s)
+                if not (os.path.exists(search_path)):
+                    print("[ERR]search sub-path not exist:{},jump test scene:{}".format(search_path, s))
+                    continue
+                sence_imgs = os.listdir(search_path)
+                test_pair = "q-{}_s-{}".format(q, s)
+                rst_current_dir = os.path.join(rst_base_path, test_pair)
+                print("[INFO]--------{} testing on {}, rst locate {}------------".format(q, search_path, rst_current_dir))
+                if len(sence_imgs):
+                    print("[ERR]search images donot exist, jump.")
+                    continue
+                if not (os.path.exists(rst_current_dir)):
+                    os.mkdir(rst_current_dir)
+                for file_s in sence_imgs:
+                    s_name = file_s.split(".jpg")
+                    img_s, cv_s_img = preprocess_byPIL(search_path, "{}".format(s_name), Config.imq_w, Config.imq_h,
+                                                       letterbox=False)
+
+
+
 
     @staticmethod
     def test_one_COCO():
