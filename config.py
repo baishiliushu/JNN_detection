@@ -5,34 +5,36 @@ class Config:
 
     base_project_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + ".")
     ####### Datasets
-    dataset = "coco"  # {VOC, coco, coco_split, other}
+    dataset = "coco"  # {VOC, coco, coco_split, other, VOC_ABBY}
     # paths to [other] datasets
     training_dir = "/home/leon/opt-exprements/coco/train2017/"
     testing_dir = "/home/leon/opt-exprements/coco/test2017/"
     annotations_dir = "/home/mmv/Documents/3.datasets/openlogo/Annotations/"
     # path to VOC
     voc_dataset_dir = "/home/leon/opt-exprements/expments/vocdevkit/"
+    voc_rubby_dataset_dir = "/home/leon/mount_point_c/datas_jinglianwen/ABBY/"  # ""
     # path to COCO
     coco_dataset_dir = "/home/leon/opt-exprements/coco/"
     coco_split = 4  # Defines the split to test for the VOC split experiment
     network_type = "darknet19"  # darknet19 mobile_net_v2 resnet18
+    load_pretrianed_weight = True
     ####### Model params
+    num_workers = 4
     batch_size = 8
-    epochs = 2
+    epochs = 100
     lr = 0.0001
     decay_lrs = {60: 0.00001, 90: 0.000001}
     weight_decay = 0.0005
     momentum = 0.9
 
-    num_workers = 8
+    im_w = 448 #416 448
+    im_h = 448 #416 448
+    imq_w = 224 #208 224
+    imq_h = 224 #208
 
-    im_w = 416 #416 414
-    im_h = 416 #416
-    imq_w = 208 #208 206
-    imq_h = 208 #208
-
-    continue_training = False
-    log_of_train = False
+    loss_reguler = "MSE"  # MSE, smooth_L1
+    continue_training = True
+    log_of_train = True
     letter_box_for_query_img = False  # if enabled, g-box need changed
     thresh = .6
 

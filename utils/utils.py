@@ -26,7 +26,7 @@ def judge_pillow_image_is_wrong(image_input):
     try:
         if image_input.size[0] == 0 or (image_input.size[1] == 0):
             is_wrong = True
-            print("[data] image is (0, 0), jump.")
+            print("[data] image({}) is ({}, {}), jump.".format(type(image_input), image_input.size[0], image_input.size[1]))
     except:
         print("[ERR][data] input less size object")
         is_wrong = True

@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 
 from config import Config
-from utils.utils import augment_img, letterbox_image
+from utils.utils import augment_img, letterbox_image, judge_pillow_image_is_wrong
 
 
 class DatasetJNN_VOC(Dataset):
@@ -75,10 +75,14 @@ class DatasetJNN_VOC(Dataset):
             break
 
         q_im = Image.open(self.VOC_path + qpath_helper + "JPEGImages/" + q_name + ".jpg")
+        if judge_pillow_image_is_wrong(q_im):
+            print("[Err]query image is empty:{}".format(q_name))
         t_im = Image.open(self.VOC_path + tpath_helper + "JPEGImages/" + t_name + ".jpg")
-
+        if judge_pillow_image_is_wrong(t_im):
+            print("[Err]target image is empty:{}".format(t_name))
         q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
-
+        if judge_pillow_image_is_wrong(q_im):
+            print("[Err]query crop {} image is empty:{}".format((qbox[0], qbox[1], qbox[2], qbox[3]), q_name))
         boxes = np.asarray(tboxes, dtype=np.float32)
 
         if self.is_training:

@@ -67,7 +67,7 @@ class DatasetJNN_COCO(Dataset):
         qcat = qcats[query_random_index]   # elements in list are all same
         q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
         if judge_pillow_image_is_wrong(q_im):
-            print("[Err]query crop image is empty:{}".format(qindex))
+            print("[Err]query crop {} image is empty:{}".format((qbox[0], qbox[1], qbox[2], qbox[3]), qindex))
 
         # get target data
         cat_img_set = self.coco_dataset.coco.catToImgs[cindex]

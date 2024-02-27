@@ -9,12 +9,13 @@ import numpy as np
 from utils.utils import logg_init_obj
 from utils.utils import network_choice
 
-MODEL_TOP_PATH = "check_points"
+MODEL_TOP_PATH = "check_points/e100-coco80-voc70-ruuby40"
+MODEL_END_TYPE = "best"
 # "/home/leon/mount_point_two/data-od"  #
-PT_FORMAT_MODEL = '{}/model_last.pt'.format(MODEL_TOP_PATH)
+PT_FORMAT_MODEL = '{}/model_{}.pt'.format(MODEL_TOP_PATH, MODEL_END_TYPE)
 # '{}/mobilenet_v2-b0353104.pth'.format(MODEL_TOP_PATH)  #
-ONNX_ORG_FORMAT_MODEL = '{}/model_last.onnx'.format(MODEL_TOP_PATH)
-ONNX_SIM_FORMAT_MODEL = "{}/simplified_last.onnx".format(MODEL_TOP_PATH)
+ONNX_ORG_FORMAT_MODEL = '{}/model_{}.onnx'.format(MODEL_TOP_PATH, MODEL_END_TYPE)
+ONNX_SIM_FORMAT_MODEL = "{}/simplified_{}.onnx".format(MODEL_TOP_PATH, MODEL_END_TYPE)
 NET_STRUCT = network_choice()
 
 
@@ -344,14 +345,14 @@ def test_mosaic():
 
 def main():
     # edit_onnx()
-    # convert_onnx()
-    # simplified_identify_node()
+    convert_onnx()
+    simplified_identify_node()
     # inference_test(onnx_path="check_points/edit-onnx/e190_d19_cat_edit.onnx",
     #                pt_path="check_points/coco_voc199epoch/model_best_total.pt")
     # estimate_flops_params()
     # export_by_net_define()
     # gen_qual_input_txt()
-    test_mosaic()
+    # test_mosaic()
     pass
 
 if __name__ == "__main__":

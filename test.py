@@ -21,8 +21,10 @@ from utils.utils import letterbox_image
 from utils.utils import network_choice
 from utils.utils import logg_init_obj
 
-def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=True):
-    q_im = Image.open(os.path.join(test_img_top_path, file_name) + file_endless)
+def preprocess_byPIL_base(file_name, resize_w, resize_h, hist=False, letterbox=True, gray=False):
+    q_im = Image.open(file_name)
+    if q_im.mode != 'RGB':
+        q_im = q_im.convert("RGB")
     if hist:
         q_im = ImageOps.equalize(q_im, mask=None)
     # q_im = q_im.resize((resize_w, resize_h))
@@ -33,11 +35,23 @@ def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endl
         #q_im = q_im.resize((resize_w, resize_h))
 
     cv_q_img = np.array(q_im)
+    if gray is True:
+        # gray
+        image_gray_color = cv2.cvtColor(cv_q_img, cv2.COLOR_BGR2GRAY)
+        # color   RGB
+        image_gray_color = cv2.cvtColor(image_gray_color, cv2.COLOR_GRAY2RGB)
+        q_im = Image.fromarray(image_gray_color)
+        cv_q_img = cv2.cvtColor(image_gray_color, cv2.COLOR_RGB2BGR)
     cv_q_img = cv_q_img[:, :, ::-1].copy()
     # To float tensors
     q_im = torch.from_numpy(np.array(q_im)).float() / 255
     img0 = q_im.permute(2, 0, 1)
     img0 = torch.unsqueeze(img0, 0)
+    return img0, cv_q_img
+
+def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=True, gray=False):
+    img0, cv_q_img = preprocess_byPIL_base(os.path.join(test_img_top_path, file_name) + file_endless,
+                                           resize_w, resize_h, hist , letterbox , gray)
     return img0, cv_q_img
 
 
@@ -47,7 +61,6 @@ def get_milliseconds_timestamp():
 
 def copy_roi_and_save(cv_s_img, box_xywh):
     image_roi = np.zeros((box_xywh[3], box_xywh[2], 3), dtype=np.uint8)
-
     return image_roi
 
 
@@ -65,48 +78,42 @@ def sorted_with_conf(t):
     return out
 
 
-def feed_forward_process(model, q_im, s_im, cv_q_img, cv_s_img, q_name, s_name, current_save_path, conf, nms, fount_sample_count=0, no_rst_count=0):
-    im_infos = (cv_s_img.shape[1], cv_s_img.shape[0], q_name, s_name)
+def feed_forward_process(model, q_name, t_name, img_q, img_s, cv_sence, conf, nums, is_save_rect=True, rst_path=""):
+    detections = None
+    fount_sample_count = 0
+    loss_sample_count = 0
+    visiable_image = cv_sence.copy()
+    im_infos = (visiable_image.shape[1], visiable_image.shape[0], q_name, t_name)
     with torch.no_grad():
         test_t = get_milliseconds_timestamp()
-        tensor_q, tensor_s = Variable(q_im).cuda(), Variable(s_im).cuda()
-        model_output = model(tensor_q, tensor_s, [])
-        print("[INFO]lenth of model_output: {}".format(len(model_output)))
+        img_q, img_s = Variable(img_q).cuda(), Variable(img_s).cuda()
+        model_output = model(img_q, img_s, [])
+        print("[INFO]model_output: {}".format(len(model_output)))
         im_info = {'width': im_infos[0], 'height': im_infos[1]}
         output = [item[0].data for item in model_output]
-        detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nms)
+        detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nums)
         test_t = get_milliseconds_timestamp() - test_t
         print("[INFO]detections: {}, using time:{}".format(detections, test_t))
         highest_score = -1.0
         if len(detections) > 0:
-            fount_sample_count = fount_sample_count + 1
-            # todo: sort
+            fount_sample_count =  1
             for detection in detections:
                 start_pt = (int(detection[0].item()), int(detection[1].item()))
                 end_pt = (int(detection[2].item()), int(detection[3].item()))
-                # todo: roi and save
-                image = cv2.rectangle(cv_s_img, start_pt, end_pt, (0, 255, 0), 2)
-                image = cv2.putText(image, "{:.4f}".format(detection[4].item()),
+                visiable_image = cv2.rectangle(visiable_image, start_pt, end_pt, (0, 255, 0), 2)
+                visiable_image = cv2.putText(visiable_image, "{:.4f}".format(detection[4].item()),
                                     (int(detection[2].item() - 25), int(detection[3].item() + 3)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.3, (100, 122, 222), 1, cv2.LINE_AA)
-                if highest_score < detection[4].item():
-                    highest_score = detection[4].item()
                 print(start_pt, end_pt)
 
-            cv2.imwrite("{}.jpg".format(os.path.join(current_save_path, s_name)), image)
+                if highest_score < detection[4].item():
+                    highest_score = detection[4].item()
+            if is_save_rect:
+                cv2.imwrite("{}.jpg".format(os.path.join(rst_path, t_name)), visiable_image)
 
         else:
-            no_rst_count = no_rst_count + 1
-            print("[FALSE]under the conf {}, nums {}, sample data {} is no result output.".format(conf, nms, s_name))
-        cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(q_name, float(highest_score), conf, nms, ""), cv_s_img)
-        cv_q_show = cv2.resize(cv_q_img, (320, 320))
-        name_of_support_img = "{}-conf {}-nms {}".format(q_name, conf, nms)
-        cv2.namedWindow(name_of_support_img, 0)
-        cv2.moveWindow(name_of_support_img, 710, 100)
-        cv2.imshow(name_of_support_img, cv_q_show)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        return fount_sample_count, no_rst_count
+            loss_sample_count = 1
+    return detections, visiable_image, fount_sample_count, loss_sample_count
 
 
 class Tester:
@@ -208,7 +215,7 @@ class Tester:
 
 
     @staticmethod
-    def test_one_OL(model_path, test_img_top_path, q_name, search_path, hist_option, rst_path, conf, nums):
+    def test_one_OL(model_path, test_img_top_path, q_name, search_path_top, hist_option, rst_path, conf, nums):
         """ Tests a a pair of images """
 
         print("testing one image...")
@@ -242,8 +249,27 @@ class Tester:
                                           letterbox=False)
 
         #test_img_top_path = "/home/leon/opt-exprements/expments/data_test/template_match/match_data/{}/".format("dir-mosaic")  # q_name
-        search_path = os.path.join(search_path, q_name)
+        search_path = os.path.join(search_path_top, q_name)
+        if not os.path.exists(search_path):
+            search_path = search_path_top
         sence_imgs = os.listdir(search_path)
+        if len(sence_imgs) < 0:
+            return
+        s_checks = []
+        r_checks = []
+        for i, s in enumerate(sence_imgs, 0):
+            if ".jpg" not in s:
+                r_checks.append(s)
+                filenames = os.listdir(os.path.join(search_path,s))
+                for f in filenames:
+                    s_checks.append(os.path.join(os.path.join(search_path,s), f))
+            else:
+                sence_imgs[i] = os.path.join(search_path, s)
+        if len(s_checks) > 0:
+            sence_imgs = s_checks
+        for r in r_checks:
+            if r in sence_imgs:
+                sence_imgs.remove(r)
         # hist_option = False
         #conf = 0.3  # Config.conf_thresh
         #nums = 0.4  # Config.nms_th17_1703669057750530.jpgresh
@@ -258,11 +284,12 @@ class Tester:
         fount_sample_count = 0
         loss_sample_count = 0
         for t_name in sence_imgs:
+            img1, cv_im = preprocess_byPIL_base(t_name, Config.im_w, Config.im_h, hist=hist_option, letterbox=False)
             #t_name = "53_1703664893160227.jpg"  #
+            t_name = t_name.split("/")[-1]
             t_name = t_name.split(".jpg")[0]
-            img1, cv_im = preprocess_byPIL(search_path, t_name, Config.im_w, Config.im_h, hist=hist_option, letterbox=False)
-            im_infos = (cv_im.shape[1], cv_im.shape[0], q_name, t_name)
 
+            im_infos = (cv_im.shape[1], cv_im.shape[0], q_name, t_name)
             with torch.no_grad():
                 test_t = get_milliseconds_timestamp()
                 img0, img1 = Variable(img0).cuda(), Variable(img1).cuda()
@@ -281,8 +308,8 @@ class Tester:
                         end_pt = (int(detection[2].item()), int(detection[3].item()))
                         image = cv2.rectangle(cv_im, start_pt, end_pt, (0, 255, 0), 2)
                         image = cv2.putText(image, "{:.4f}".format(detection[4].item()),
-                                            (int(detection[2].item() - 25), int(detection[3].item() + 3)),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.3, (100, 122, 222), 1, cv2.LINE_AA)
+                                            (min(int(detection[2].item() - 25), im_infos[0] - 1), min(int(detection[3].item() + 15), im_infos[1] - 1)),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 122, 222), 1, cv2.LINE_AA)
                         if highest_score < detection[4].item():
                             highest_score = detection[4].item()
                         print(start_pt, end_pt)
@@ -292,15 +319,15 @@ class Tester:
                 else:
                     loss_sample_count = loss_sample_count + 1
                     print("under the conf {}, nums {}, sample data {} is no result output.".format(conf, nums, t_name))
-                cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(t_name, float(highest_score), conf, nums, ""),
-                           cv_im)
-                cv_q_show = cv2.resize(cv_q_img, (320, 320))
-                name_of_support_img = "{}-conf {}-nms {}".format(q_name, conf, nums)
-                cv2.namedWindow(name_of_support_img, 0)
-                cv2.moveWindow(name_of_support_img, 710, 100)
-                cv2.imshow(name_of_support_img, cv_q_show)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
+                # cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(t_name, float(highest_score), conf, nums, ""),
+                #            cv_im)
+                # cv_q_show = cv2.resize(cv_q_img, (320, 320))
+                # name_of_support_img = "{}-conf {}-nms {}".format(q_name, conf, nums)
+                # cv2.namedWindow(name_of_support_img, 0)
+                # cv2.moveWindow(name_of_support_img, 710, 100)
+                # cv2.imshow(name_of_support_img, cv_q_show)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
         pet_found = float(fount_sample_count/len(sence_imgs))
         pet_found = pet_found * 100
         print("Finished!(found count {} + loss count {} ?= {} total. fount / total = {}%)".format(fount_sample_count,
@@ -308,56 +335,92 @@ class Tester:
                                                                                                   len(sence_imgs),
                                                                                                   pet_found))
 
-
     @staticmethod
-    def test_on_cross_cats(model, query_cat_name:str, query_base_path, search_base_path, rst_base_path, hist_flag=False, conf=0.3, nms=0.1):
+    def test_on_cross_cats(model_file, query_cat_name:str, query_base_path, search_base_path, rst_base_path, hist_flag=False, conf=0.3, nms=0.1):
         if Config.log_of_train:
-            logg_init_obj("log/console_train_{}.log".format(time.time()))
-        if os.path.isfile(model):
-            print("[ERR]model tested NOT exist {}".format(model))
-            return
-
+            logg_init_obj("./log/console_test_{}.log".format(time.time()))
+        model_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), model_file)
+        if not os.path.isfile(model_file):
+            print("[ERR]model tested NOT exist {}".format(model_file))
+            exit(-1)
+        if not (os.path.exists(search_base_path)):
+            print("[ERR]search top path not exist:{}".format(search_base_path))
+            exit(-2)
         model = network_choice()  # DarkJNN()
-        checkpoint = torch.load()
+        checkpoint = torch.load(model_file)
         model.load_state_dict(checkpoint['model'])
         model.cuda()
         model.eval()
-        # todo: forward -> rst-total-img , [rst-roi-imgs]
 
-        if not (os.path.exists(search_base_path)):
-            print("[WARN]search top path not exist:{}".format(search_base_path))
-            exit(-1)
         if not (os.path.exists(rst_base_path)):
-            print("[WARN]rst top path not exist:{}".format(rst_base_path))
+            print("[INFO]rst top path not exist:{}".format(rst_base_path))
             os.mkdir(rst_base_path)
-        queries = list()
-        if isinstance(query_cat_name, list):
-            queries = query_cat_name
-        else:
-            queries.append(query_cat_name)
-        for q in queries:
-            img_q, cv_q_img = preprocess_byPIL(query_base_path, "{}".format(q), Config.imq_w, Config.imq_h,
-                                               letterbox=True)
-            for s in os.listdir(search_base_path):
-                search_path = os.path.join(search_base_path, s)
-                if not (os.path.exists(search_path)):
-                    print("[ERR]search sub-path not exist:{},jump test scene:{}".format(search_path, s))
-                    continue
-                sence_imgs = os.listdir(search_path)
-                test_pair = "q-{}_s-{}".format(q, s)
-                rst_current_dir = os.path.join(rst_base_path, test_pair)
-                print("[INFO]--------{} testing on {}, rst locate {}------------".format(q, search_path, rst_current_dir))
-                if len(sence_imgs):
-                    print("[ERR]search images donot exist, jump.")
-                    continue
-                if not (os.path.exists(rst_current_dir)):
-                    os.mkdir(rst_current_dir)
-                for file_s in sence_imgs:
-                    s_name = file_s.split(".jpg")
-                    img_s, cv_s_img = preprocess_byPIL(search_path, "{}".format(s_name), Config.imq_w, Config.imq_h,
-                                                       letterbox=False)
 
+        img_q, cv_q_img = preprocess_byPIL(query_base_path, "{}".format(query_cat_name), Config.imq_w, Config.imq_h,
+                                           letterbox=True, gray=True)
+        for s in os.listdir(search_base_path):
+            search_path = os.path.join(search_base_path, s)
+            if not (os.path.exists(search_path)):
+                print("[WARN]search sub-path not exist:{},jump scene:{}".format(search_path, s))
+                continue
+            sence_imgs = os.listdir(search_path)
+            if len(sence_imgs) < 1:
+                print("[WARN]search images do not exist in {}, jump.".format(search_path))
+                continue
+            path_name_endless = "mix"
+            if query_cat_name == s:
+                path_name_endless = "canter"
+            rst_current_dir = os.path.join(rst_base_path, "{}-{}_{}".format(query_cat_name, s, path_name_endless))
+            print("[INFO]--------{} testing on {}, rst locate {}------------".format(query_cat_name, search_path, rst_current_dir))
 
+            f_count = 0
+            l_count = 0
+            need_create_save_path = True
+            for file_s in sence_imgs:
+                s_name = file_s.split(".jpg")[0]
+                img_s, cv_s_img = preprocess_byPIL(search_path, "{}".format(s_name), Config.im_w, Config.im_h, letterbox=False)
+                detections, visiable_image, fount_sample_count, loss_sample_count = \
+                    feed_forward_process(model, query_cat_name, s, img_q, img_s, cv_s_img, conf, nms, False)
+                if detections is None or len(detections) < 1:
+                    continue
+                # todo: sort tensors [detections]
+                highest_score = 0
+                roi_imgs = list()
+                if len(detections) > 0 and need_create_save_path:
+                    if not (os.path.exists(rst_current_dir)):
+                        os.mkdir(rst_current_dir)
+                        need_create_save_path = False
+                for i, d in enumerate(detections):
+                    start_pt = (int(d[0].item()), int(d[1].item()))
+                    end_pt = (int(d[2].item()), int(d[3].item()))
+                    image_crop_roi = cv_s_img[start_pt[1]:end_pt[1], start_pt[0]:end_pt[0]]
+                    score_roi = {}
+                    save_path_score_key = "{}.jpg".format(os.path.join(rst_current_dir, "{:3f}-{}-{}".format(d[4].item(), s_name, i)))
+                    score_roi[save_path_score_key] = image_crop_roi
+                    roi_imgs.append(score_roi)
+                    if highest_score < d[4].item():
+                        highest_score = d[4].item()
+                for r_pair in roi_imgs:
+                    for c in r_pair:
+                        if (r_pair[c].shape[0] > 0) and (r_pair[c].shape[1] > 0):
+                            print("[INFO]save roi {}".format(c))
+                            cv2.imwrite(c, r_pair[c])
+
+                f_count += fount_sample_count
+                l_count += loss_sample_count
+                if loss_sample_count > 0:
+                    print("[WARN]under conf {}, nums {}, {} in {} NO output.".format(conf, nms, query_cat_name, s_name))
+                print("[SUM]--------{} tested {};rst found :{}, miss:{}, locate {}------------".format(query_cat_name, search_path, rst_current_dir, f_count, l_count))
+
+                cv_q_show = cv2.resize(cv_q_img, (320, 320))
+                name_of_support_img = "{}-conf {}-nms {}".format(query_cat_name, conf, nms)
+                cv2.namedWindow(name_of_support_img, 0)
+                cv2.moveWindow(name_of_support_img, 710, 100)
+                # cv2.imshow("{} with S{:.4f} C{} N{} T:{}".format(s, float(highest_score), conf, nms, ""),
+                #            visiable_image)
+                # cv2.imshow(name_of_support_img, cv_q_show)
+                # cv2.waitKey(0)
+                cv2.destroyAllWindows()
 
 
     @staticmethod

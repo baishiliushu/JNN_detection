@@ -150,8 +150,13 @@ def yolo_loss(output, target):
     b = conf_pred_batch.size()[0]
 
     # calculate the loss, normalized by batch size.
-    box_loss = 1 / b * Config.coord_scale * F.mse_loss(delta_pred_batch * box_mask, box_target * box_mask,
-                                                       reduction='sum') / 2.0
-    iou_loss = 1 / b * F.mse_loss(conf_pred_batch * iou_mask, iou_target * iou_mask, reduction='sum') / 2.0
+    if Config.loss_reguler == "MSE":
+        box_loss = 1 / b * Config.coord_scale * F.mse_loss(delta_pred_batch * box_mask, box_target * box_mask,
+                                                           reduction='sum') / 2.0
+        iou_loss = 1 / b * F.mse_loss(conf_pred_batch * iou_mask, iou_target * iou_mask, reduction='sum') / 2.0
+    if Config.loss_reguler == "smooth_L1":
+        box_loss = 1 / b * Config.coord_scale * F.smooth_l1_loss(delta_pred_batch * box_mask, box_target * box_mask,
+                                                                 reduction='sum') / 2.0
+        iou_loss = 1 / b * F.smooth_l1_loss(conf_pred_batch * iou_mask, iou_target * iou_mask, reduction='sum') / 2.0
 
     return box_loss, iou_loss

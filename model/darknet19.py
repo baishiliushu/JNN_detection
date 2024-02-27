@@ -8,7 +8,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import os
 import torch.nn as nn
 import numpy as np
 from torch.autograd import Variable
@@ -98,9 +98,23 @@ class Darknet19(nn.Module):
                 self.in_channels = v
         return nn.Sequential(*layers)
 
-    def load_weights(self, weights_file="/home/mmv/Documents/2.projects/JNN_detection/darknet19_448.weights"):
+    def load_weights(self, weights_file='weights/darknet19.weights'):
         weights_loader = WeightLoader()
         weights_loader.load(self, weights_file)
+
+    def load_weight_assert(self, weight_file='weights/darknet19.weights'):
+        if not os.path.exists(weight_file):
+            import wget
+            url = 'https://pjreddie.com/media/files/darknet19.weights'#'https://s3.ap-northeast-2.amazonaws.com/deepbaksuvision/darknet19-deepBakSu-e1b3ec1e.pth'
+            print('将下载权重文件,如果太慢,你可以自己下载然后放到weights文件夹下'.format(url))
+            print('Will download weight file from {}'.format(url))
+            wget.download(url=url, out='weights/darknet19-deepBakSu-e1b3ec1e.pth')
+        # 转换权重文件中的keys.(change the weights dict `keys)
+        assert len(torch.load(weight_file).keys()) == len(self.state_dict().keys())
+        dic = {}
+        for now_keys, values in zip(self.state_dict().keys(), torch.load(weight_file).values()):
+            dic[now_keys] = values
+        self.load_state_dict(dic)
 
 
 class WeightLoader(object):
@@ -174,6 +188,7 @@ if __name__ == '__main__':
     print(out[0][0])
 
     model.load_weights("/home/mmv/Documents/2.projects/JNN_detection/darknet19_448.weights")
+    #"/home/mmv/Documents/2.projects/JNN_detection/darknet19_448.weights"
     out = model(im_variable)
     print(out[0][0])
 

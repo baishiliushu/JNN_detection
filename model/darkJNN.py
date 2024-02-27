@@ -37,8 +37,8 @@ class DarkJNN(nn.Module):
         super(DarkJNN, self).__init__()
 
         darknet19 = Darknet19()
-
-        # darknet19.load_weights()
+        if Config.load_pretrianed_weight is True:
+            darknet19.load_weights()
 
         # JNN darknet backbone
         self.conv0 = nn.Sequential(darknet19.layer0)

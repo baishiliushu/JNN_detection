@@ -13,6 +13,7 @@ from dataloaders.datasetJNN import DatasetJNN
 from dataloaders.datasetJNN_VOC import DatasetJNN_VOC
 from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
+from dataloaders.datasetJNN_VOC_abby import DatasetJNN_VOC_ABBY
 
 from utils.utils import Utils
 from utils.utils import logg_init_obj
@@ -40,6 +41,8 @@ class Trainer:
         elif Config.dataset == "coco_split":
             print("dataset: ", Config.coco_dataset_dir, "--Split: ", Config.coco_split)
             dataset = DatasetJNN_COCOsplit(Config.coco_dataset_dir, Config.coco_split)
+        elif Config.dataset == "VOC_ABBY":
+            dataset = DatasetJNN_VOC_ABBY(Config.voc_rubby_dataset_dir)
         else:
             print("dataset: ", Config.training_dir)
             folder_dataset = dset.ImageFolder(root=Config.training_dir)
@@ -110,16 +113,15 @@ class Trainer:
                    print(str(i) + "/" + str(len(train_dataloader)))  # progress
 
                 img0, img1, targets, num_obj = data
-
                 img0, img1, targets, num_obj = Variable(img0).cuda(), Variable(img1).cuda(), targets.cuda(), num_obj.cuda()
                 if judge_tensor_is_zero(targets):
-                    print("tensor data targets is all zero.")
+                    print("[WARN]tensor data targets is all zero.")
                     continue
                 if judge_tensor_is_zero(img0):
-                    print("tensor data img0 is all zero.")
+                    print("[WARN]tensor data img0 is all zero.")
                     continue
                 if judge_tensor_is_zero(img1):
-                    print("tensor data img1 is all zero.")
+                    print("[WARN]tensor data img1 is all zero.")
                     continue
                 model_timer = time.time()
                 loc_l, conf_l = model(img0, img1, targets, num_obj, training=True)
