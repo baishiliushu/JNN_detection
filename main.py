@@ -1,4 +1,4 @@
-from train import Trainer
+from trainCls import Trainer
 from test import Tester
 from config import ConfigInit
 

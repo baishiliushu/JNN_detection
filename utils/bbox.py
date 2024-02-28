@@ -11,7 +11,7 @@ from __future__ import print_function
 import torch
 
 
-def box_ious(box1, box2):
+def box_ious(box1, box2, giou_flag=True):
     """
     Implement the intersection over union (IoU) between box1 and box2 (x1, y1, x2, y2)
 
@@ -31,6 +31,7 @@ def box_ious(box1, box2):
     yi1 = torch.max(box1[:, 1].view(N, 1), box2[:, 1].view(1, K))
     xi2 = torch.min(box1[:, 2].view(N, 1), box2[:, 2].view(1, K))
     yi2 = torch.min(box1[:, 3].view(N, 1), box2[:, 3].view(1, K))
+
 
     # we want to compare the compare the value with 0 elementwise. However, we can't
     # simply feed int 0, because it will invoke the function torch(max, dim=int) which is not
@@ -52,7 +53,15 @@ def box_ious(box1, box2):
     union_area = box1_area + box2_area - inter
 
     ious = inter / union_area
-
+    if giou_flag:  # Generalized IoU https://arxiv.org/pdf/1902.09630.pdf
+        xj1 = torch.min(box1[:, 0].view(N, 1), box2[:, 0].view(1, K))
+        yj1 = torch.min(box1[:, 1].view(N, 1), box2[:, 1].view(1, K))
+        xj2 = torch.max(box1[:, 2].view(N, 1), box2[:, 2].view(1, K))
+        yj2 = torch.max(box1[:, 3].view(N, 1), box2[:, 3].view(1, K))
+        cw = torch.max(xj2 - xj1, box1.new(1).fill_(0))
+        ch = torch.max(yj2 - yj1, box1.new(1).fill_(0))
+        c_area = cw * ch + 1e-16  # convex area
+        ious = ious - (c_area - union_area) / c_area  # GIoU
     return ious
 
 

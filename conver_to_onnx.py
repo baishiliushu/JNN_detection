@@ -1,15 +1,15 @@
 import random
 import time
 import torch
-from config import Config
 from onnxsim import simplify
 import onnx as OX
 import onnxruntime as OXRT
 import numpy as np
 from utils.utils import logg_init_obj
 from utils.utils import network_choice
+from config import Config
 
-MODEL_TOP_PATH = "check_points/e100-coco80-voc70-ruuby40"
+MODEL_TOP_PATH = "check_points/cls-e3-voc-448"
 MODEL_END_TYPE = "best"
 # "/home/leon/mount_point_two/data-od"  #
 PT_FORMAT_MODEL = '{}/model_{}.pt'.format(MODEL_TOP_PATH, MODEL_END_TYPE)
@@ -49,7 +49,8 @@ def gen_onnx_by_define(net, input_shapes, total_file_path=None):
     OX.save(OX.shape_inference.infer_shapes(OX.load(ONNX_ORG_FORMAT_MODEL)), ONNX_ORG_FORMAT_MODEL)
 
 
-def export_from_best_pt(net, xq, xt, use_cpu=True, file_path=PT_FORMAT_MODEL):
+def export_from_best_pt(net, xq, xt, use_cpu=True, file_path=PT_FORMAT_MODEL,
+                        input_names = ['x2', 'x1'], output_names = ['delta_pred', 'conf_pred']):
 
     if use_cpu:
         checkpoint = torch.load(file_path, map_location="cpu")
@@ -63,8 +64,6 @@ def export_from_best_pt(net, xq, xt, use_cpu=True, file_path=PT_FORMAT_MODEL):
        net.cuda()
     net.eval()
     dummy_input = (xq, xt)
-    input_names = ['x2', 'x1']
-    output_names = ['delta_pred', 'conf_pred']
     torch.onnx.export(net, dummy_input, ONNX_ORG_FORMAT_MODEL, input_names=input_names, output_names=output_names, verbose='True')
     OX.save(OX.shape_inference.infer_shapes(OX.load(ONNX_ORG_FORMAT_MODEL)), ONNX_ORG_FORMAT_MODEL)
 

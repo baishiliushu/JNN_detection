@@ -7,19 +7,19 @@ import torch
 from torch.utils.data import Dataset
 
 from config import Config
-from utils.utils import augment_img, letterbox_image, judge_pillow_image_is_wrong
+from utils.utils import augment_img_cls, letterbox_image, judge_pillow_image_is_wrong
 
 
-class DatasetJNN_VOC(Dataset):
+class DatasetJNN_VOC_CLS(Dataset):
 
-    def __init__(self, VOC_path, mode="trainval", year="20072012", is_training=True, use_binary_cls=False):
+    def __init__(self, VOC_path, mode="trainval", year="20072012", is_training=True):
 
         self.VOC_path = VOC_path
         self.is_training = is_training
         self.image_paths = []
 
 
-        self.unseen_classes = ['cow', 'sheep', 'cat', 'aeroplane']
+        self.unseen_classes = ['cow', 'sheep', 'cat', 'aeroplane', 'person']
         #self.unseen_classes = ['bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'chair', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sofa', 'train', 'tvmonitor']
         # self.unseen_classes = ['cow', 'sheep', 'cat', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'chair', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sofa', 'train', 'tvmonitor']
 
@@ -66,14 +66,20 @@ class DatasetJNN_VOC(Dataset):
 
             t_annot = ET.parse(self.VOC_path + tpath_helper + "Annotations/" + t_name + ".xml")
 
-            tboxes, tclasses = self.get_boxes(t_annot, qclass=qclass)
+            tboxes, tclasses = self.get_boxes(t_annot, qclass=random.choices(['', qclass], [0.6, 0.4])[0])
             tboxes, tclasses, unseen_flag = self.filter_boxes(tboxes, tclasses)
 
-            if len(tboxes) == 0:
+            if len(tboxes) == 0 or unseen_flag:
                 tindex = random.randint(0, len(self.image_paths) - 1)
                 continue
             break
-
+        # print("[000]qclass(type{}) :{} v.s. tclasses(type{}):{} ".format(type(qclass), qclass, type(tclasses), tclasses))
+        for i in range(0, len(tclasses)):
+            if tclasses[i] == qclass:
+                tclasses[i] = 1
+            else:
+                tclasses[i] = 0
+        # print("[111]qclass(type{}) :{} v.s. tclasses(type{}):{} ".format(type(qclass), qclass, type(tclasses), tclasses))
         q_im = Image.open(self.VOC_path + qpath_helper + "JPEGImages/" + q_name + ".jpg")
         if judge_pillow_image_is_wrong(q_im):
             print("[Err]query image is empty:{}".format(q_name))
@@ -84,9 +90,9 @@ class DatasetJNN_VOC(Dataset):
         if judge_pillow_image_is_wrong(q_im):
             print("[Err]query crop {} image is empty:{}".format((qbox[0], qbox[1], qbox[2], qbox[3]), q_name))
         boxes = np.asarray(tboxes, dtype=np.float32)
-
+        class_values = np.asarray(tclasses, dtype=np.float32)
         if self.is_training:
-            t_im, boxes = augment_img(t_im, boxes)
+            t_im, boxes, class_values = augment_img_cls(t_im, boxes, class_values)
 
             w, h = t_im.size[0], t_im.size[1]
             boxes[:, 0::2] = np.clip(boxes[:, 0::2] / w, 0.001, 0.999)
@@ -108,8 +114,8 @@ class DatasetJNN_VOC(Dataset):
 
             boxes = torch.from_numpy(boxes)
             num_obj = torch.Tensor([boxes.size(0)]).long()
-
-            return q_im, t_im, boxes, num_obj
+            class_values = torch.from_numpy(class_values)
+            return q_im, t_im, boxes, class_values, num_obj
 
         else:
             w, h = t_im.size[0], t_im.size[1]

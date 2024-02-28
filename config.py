@@ -4,8 +4,10 @@ import os
 class Config:
 
     base_project_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + ".")
+    continue_training = True
+    epochs = 120
     ####### Datasets
-    dataset = "coco"  # {VOC, coco, coco_split, other, VOC_ABBY}
+    dataset = "VOC"  # {VOC, coco, coco_split, other, VOC_ABBY}
     # paths to [other] datasets
     training_dir = "/home/leon/opt-exprements/coco/train2017/"
     testing_dir = "/home/leon/opt-exprements/coco/test2017/"
@@ -16,24 +18,24 @@ class Config:
     # path to COCO
     coco_dataset_dir = "/home/leon/opt-exprements/coco/"
     coco_split = 4  # Defines the split to test for the VOC split experiment
-    network_type = "darknet19"  # darknet19 mobile_net_v2 resnet18
-    load_pretrianed_weight = True
+    network_type = "darknet19cls"  # darknet19 mobile_net_v2 resnet18
+
     ####### Model params
+    load_pretrianed_weight = True
     num_workers = 4
     batch_size = 8
-    epochs = 100
     lr = 0.0001
     decay_lrs = {60: 0.00001, 90: 0.000001}
     weight_decay = 0.0005
     momentum = 0.9
 
-    im_w = 448 #416 448
-    im_h = 448 #416 448
-    imq_w = 224 #208 224
-    imq_h = 224 #208
+    im_w = 416 #416 448
+    im_h = 416 #416 448
+    imq_w = 208 #208 224
+    imq_h = 208 #208
 
     loss_reguler = "MSE"  # MSE, smooth_L1
-    continue_training = True
+
     log_of_train = True
     letter_box_for_query_img = False  # if enabled, g-box need changed
     thresh = .6
@@ -65,7 +67,7 @@ class Config:
     noobject_scale = 1
     class_scale = 1
     coord_scale = 1
-
+    debug_print = False
 
 class ConfigInit:
     def __init__(self):

@@ -7,6 +7,7 @@ import sys
 from config import Config
 from model.darkJNN import DarkJNN
 from model.mobilev2JNN import mobilev2JNN
+from model.darkJNNBinaryCls import DarkJNNCls
 import numbers
 
 def judge_tensor_is_zero(input_, dev="cuda:0"):
@@ -41,6 +42,9 @@ def network_choice(handle_choice=None):
     if handle_choice == "mobile_net_v2":
         net = mobilev2JNN()
         net_name = handle_choice
+    if handle_choice == "darknet19cls":
+        net = DarkJNNCls()
+        net_name = handle_choice
     print("choose net :{}".format(net_name))
     return net
 
@@ -71,15 +75,25 @@ class Utils:
         # kind of hack, this will break down a list of tuple into
         # individual list
         bsize = len(batch)
-        im_dataq, im_datat, boxes, num_obj = zip(*batch)
-        max_num_obj = max([x.item() for x in num_obj])
-        padded_boxes = torch.zeros((bsize, max_num_obj, 4))
+        if "cls" not in Config.network_type:
+            im_dataq, im_datat, boxes, num_obj = zip(*batch)
+            max_num_obj = max([x.item() for x in num_obj])
+            padded_boxes = torch.zeros((bsize, max_num_obj, 4))
 
-        for i in range(bsize):
-            padded_boxes[i, :num_obj[i], :] = boxes[i]
+            for i in range(bsize):
+                padded_boxes[i, :num_obj[i], :] = boxes[i]
 
-        return torch.stack(im_dataq, 0), torch.stack(im_datat, 0), padded_boxes, torch.stack(num_obj, 0)
+            return torch.stack(im_dataq, 0), torch.stack(im_datat, 0), padded_boxes, torch.stack(num_obj, 0)
+        else:
+            im_dataq, im_datat, boxes, gt_classes, num_obj = zip(*batch)
+            max_num_obj = max([x.item() for x in num_obj])
+            padded_boxes = torch.zeros((bsize, max_num_obj, 4))
+            padded_classes = torch.zeros((bsize, max_num_obj,))
+            for i in range(bsize):
+                padded_boxes[i, :num_obj[i], :] = boxes[i]
+                padded_classes[i, :num_obj[i]] = gt_classes[i]
 
+            return torch.stack(im_dataq, 0), torch.stack(im_datat, 0), padded_boxes, padded_classes, torch.stack(num_obj, 0)
 
 class ConsoleLogger(object):
 
@@ -101,6 +115,44 @@ class ConsoleLogger(object):
 def logg_init_obj(filename="log.txt"):
     sys.stdout = ConsoleLogger(filename=filename)
 
+
+def augment_img_cls(img, boxes, gt_classes):
+    """
+    Apply data augmentation.
+    1. convert color to HSV
+    2. adjust hue(.1), saturation(1.5), exposure(1.5)
+    3. convert color to RGB
+    4. random scale (up to 20%)
+    5. translation (up to 20%)
+    6. resize to given input size.
+
+    Arguments:
+    img -- PIL.Image object
+    boxes -- numpy array of shape (N, 4) N is number of boxes, (x1, y1, x2, y2)
+    gt_classes -- numpy array of shape (N). ground truth class index 0 ~ (N-1)
+    im_info -- dictionary {width:, height:}
+
+    Returns:
+    au_img -- numpy array of shape (H, W, 3)
+    au_boxes -- numpy array of shape (N, 4) N is number of boxes, (x1, y1, x2, y2)
+    au_gt_classes -- numpy array of shape (N). ground truth class index 0 ~ (N-1)
+    """
+
+    # img = np.array(img).astype(np.float32)
+    boxes = np.copy(boxes).astype(np.float32)
+
+    for i in range(5):
+        img_t, boxes_t = random_scale_translation(img.copy(), boxes.copy(), jitter=Config.jitter)
+        keep = (boxes_t[:, 0] != boxes_t[:, 2]) & (boxes_t[:, 1] != boxes_t[:, 3])
+        boxes_t = boxes_t[keep, :]
+        if boxes_t.shape[0] > 0:
+            img = img_t
+            boxes = boxes_t
+            gt_classes = gt_classes[keep]
+            break
+
+    img = random_distort(img, Config.hue, Config.saturation, Config.exposure)
+    return img, boxes, gt_classes
 
 def augment_img(img, boxes):
     """
