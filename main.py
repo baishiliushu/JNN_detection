@@ -3,7 +3,8 @@ from test import Tester
 from config import ConfigInit
 
 def train():
-    Trainer.train()
+    t = Trainer()
+    t.train()
 
 
 def test():

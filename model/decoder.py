@@ -171,8 +171,71 @@ def decode(model_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
     seq = [boxes_keep, conf_keep]
 
     return torch.cat(seq, dim=1)
-    """ 
+
+
+def filter_boxes_cls(boxes_pred, conf_pred, classes_pred, confidence_threshold=0.6):
+    """
+        Filter boxes whose confidence is lower than a given threshold
+
+        Arguments:
+        boxes_pred -- tensor of shape (H * W * num_anchors, 4) (x1, y1, x2, y2) predicted boxes
+        conf_pred -- tensor of shape (H * W * num_anchors, 1)
+        classes_pred -- tensor of shape (H * W * num_anchors, num_classes)
+        threshold -- float, threshold used to filter boxes
+
+        Returns:
+        filtered_boxes -- tensor of shape (num_positive, 4)
+        filtered_conf -- tensor of shape (num_positive, 1)
+        filtered_cls_max_conf -- tensor of shape (num_positive, num_classes)
+        filtered_cls_max_id -- tensor of shape (num_positive, num_classes)
+        """
+
+    # multiply class scores and objectiveness score
+    # use class confidence score
+    # TODO: use objectiveness (IOU) score or class confidence score
+    # ---------------------------------------------------------------------#
+    cls_max_conf, cls_max_id = torch.max(classes_pred, dim=-1, keepdim=True)
+    # postive_index = (classes_pred == 1.0).nonzero() #[[0.9,0], [0.17, 0], ...]only left class value==1
+    class_conf = classes_pred[0:]
+
+    cls_index = (cls_max_conf > confidence_threshold).view(-1)
+    print("[_threshold]cls index found :{}".format(torch.sum(cls_index).item()))
+    pos_inds = (conf_pred > confidence_threshold).view(-1)
+    print("[_threshold]loc index found :{}".format(torch.sum(pos_inds).item()))
+    pos_inds = pos_inds & cls_index
+    # cls_conf = conf_pred * cls_max_conf
+    # pos_inds = (cls_conf > confidence_threshold).view(-1)
+
+    print("[_threshold]loc & cls index found :{}".format(torch.sum(pos_inds).item()))
+    filtered_boxes = boxes_pred[pos_inds, :]
+    filtered_conf = conf_pred[pos_inds, :]
+
+    filtered_cls_max_conf = cls_max_conf[pos_inds, :]
+
+    filtered_cls_max_id = cls_max_id[pos_inds, :]
+
+    return filtered_boxes, filtered_conf, filtered_cls_max_conf, filtered_cls_max_id.float()
+
+
+def decode_cls(yolo_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
+    deltas = yolo_output[0].cpu()
+    conf = yolo_output[1].cpu()
+    classes = yolo_output[2].cpu()
+
+    num_classes = classes.size(1)
+    # apply deltas to anchors
+    boxes = generate_prediction_boxes(deltas)
+    # filter boxes on confidence score
+    boxes, conf, cls_max_conf, cls_max_id = filter_boxes_cls(boxes, conf, classes, conf_threshold)
+    # no detection !
+    if boxes.size(0) == 0:
+        return []
+    # scale boxes
+    boxes = scale_boxes(boxes, im_info)
+
     detections = []
+
+    cls_max_id = cls_max_id.view(-1)
 
     # apply NMS classwise
     for cls in range(num_classes):
@@ -185,17 +248,18 @@ def decode(model_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
         boxes_pred_class = boxes[inds, :].view(-1, 4)
         conf_pred_class = conf[inds, :].view(-1, 1)
         cls_max_conf_class = cls_max_conf[inds].view(-1, 1)
+        classes_class = cls_max_id[inds].view(-1, 1)
 
-        nms_keep = yolo_nms(boxes_pred_class, conf_pred_class.view(-1), nms_threshold)
+        nms_keep = nms(boxes_pred_class, conf_pred_class.view(-1), nms_threshold)
 
         boxes_pred_class_keep = boxes_pred_class[nms_keep, :]
         conf_pred_class_keep = conf_pred_class[nms_keep, :]
         cls_max_conf_class_keep = cls_max_conf_class.view(-1, 1)[nms_keep, :]
+        classes_class_keep = classes_class.view(-1, 1)[nms_keep, :]
 
-        seq = [boxes_pred_class_keep, conf_pred_class_keep, cls_max_conf_class_keep]
+        seq = [boxes_pred_class_keep, conf_pred_class_keep, cls_max_conf_class_keep, classes_class_keep.float()]
 
         detections_cls = torch.cat(seq, dim=-1)
         detections.append(detections_cls)
 
     return torch.cat(detections, dim=0)
-    """

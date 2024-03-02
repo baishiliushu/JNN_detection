@@ -4,10 +4,10 @@ import os
 class Config:
 
     base_project_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + ".")
-    continue_training = True
-    epochs = 120
+    continue_training = False
+    epochs = 16
     ####### Datasets
-    dataset = "VOC"  # {VOC, coco, coco_split, other, VOC_ABBY}
+    dataset = "coco"  # {VOC, coco, coco_split, other, VOC_ABBY}
     # paths to [other] datasets
     training_dir = "/home/leon/opt-exprements/coco/train2017/"
     testing_dir = "/home/leon/opt-exprements/coco/test2017/"
@@ -18,11 +18,11 @@ class Config:
     # path to COCO
     coco_dataset_dir = "/home/leon/opt-exprements/coco/"
     coco_split = 4  # Defines the split to test for the VOC split experiment
-    network_type = "darknet19cls"  # darknet19 mobile_net_v2 resnet18
-
+    network_type = "darknet19cls"  # darknet19  darknet19cls mobile_net_v2 resnet18
+    use_giou = False
     ####### Model params
     load_pretrianed_weight = True
-    num_workers = 4
+    num_workers = 0
     batch_size = 8
     lr = 0.0001
     decay_lrs = {60: 0.00001, 90: 0.000001}
@@ -49,7 +49,7 @@ class Config:
     strides = 32
 
     ####### Model save/load path
-    model_father_path = base_project_dir + "/check_points/"  # check_points/
+    model_father_path = base_project_dir + "/check_points/cls-coco-imagenet-try/"  # check_points/coco_voc199epoch-416/
     best_model_path = model_father_path + "model_best"
     model_path = model_father_path + "model_last"
     model_endless = ".pt"
@@ -63,10 +63,10 @@ class Config:
     mAP_path = base_project_dir + "/mAP/"
 
     ####### Loss
-    object_scale = 5
+    object_scale = 5  # 5 1 1 1
     noobject_scale = 1
-    class_scale = 1
-    coord_scale = 1
+    class_scale = 1.6
+    coord_scale = 2.2
     debug_print = False
 
 class ConfigInit:

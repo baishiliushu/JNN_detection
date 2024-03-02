@@ -159,6 +159,19 @@ def parseXmlFilse(image_path, anno_path, save_path, category_txt="labels-classes
                 run_record_file.write(current_category + "\n")
         has_record_category.append(current_category)
 
+def write_txt_from_xml_sub_path(xml_dir="/home/leon/opt-exprements/coco/annotations/train_voc"):
+    xmls = []
+    for root, dirs, files in os.walk(xml_dir):
+        xml_names = [*map(lambda f: os.path.join("", str(f).replace(".xml", "\n")), files)]
+        xmls.extend(xml_names)
+
+    with open("/home/leon/opt-exprements/coco/ImageSets/Main/train_order.txt", "x") as t:
+        t.writelines(xmls)
+    random.shuffle(xmls)
+    with open("/home/leon/opt-exprements/coco/ImageSets/Main/train.txt", "x") as t:
+        t.writelines(xmls)
+
+
 
 def write_imagesets_txt(xml_base_dir, txt_file_path="Main", train_val_interval=8):
     middle_paths = dir_struct(xml_base_dir)
@@ -236,15 +249,15 @@ def check_endless(endless='.jpg'):
 
 def clean_image_format_RBG():
     from PIL import Image
-    image_path = "/home/leon/mount_point_c/datas_jinglianwen/ABBY/JPEGImages/TRAIN/"
-    txt_file = "/home/leon/mount_point_c/datas_jinglianwen/ABBY/Annos/TRAIN/Main/trainval_only_jpg.txt"
+    image_path = "/home/leon/opt-exprements/coco/train2017/" #"/home/leon/mount_point_c/datas_jinglianwen/ABBY/JPEGImages/TRAIN/"
+    txt_file = "/home/leon/opt-exprements/coco/ImageSets/Main/train.txt" #"ABBY/Annos/TRAIN/Main/trainval_only_jpg.txt"
     context_set = []
     with open(txt_file, "r") as org:
         for i in org.readlines():
             context_set.append(i.strip())
     option_count = 0
     for i in context_set:
-        image_file = os.path.join(image_path , i + ".jpg")
+        image_file = os.path.join(image_path, i + ".jpg")
         im = Image.open(image_file)
         if str(im.mode) == "RGB":
             continue
@@ -280,11 +293,13 @@ if __name__ == '__main__':
         print("bbox nums: {}".format(bbox_nums))
     else:
         data_path = "/home/leon/mount_point_c/datas_jinglianwen/ABBY/"
+        data_path = "/home/leon/mount_point_c/datas_jinglianwen/ABBY/"
         anno_path = data_path + 'labels/TRAIN/'
         image_path = data_path + 'JPEGImages/TRAIN/' #20220720_dog/data-4/gray/cam0
         save_path = data_path + 'Annos/ForTRAIN/'
         # write_imagesets_txt(data_path + 'Annos/TRAIN/')
-        check_endless()
+        # check_endless()
+        clean_image_format_RBG()
         exit(0)
         parseXmlFilse(image_path, anno_path, save_path)
         print("image nums: {}".format(images_nums))

@@ -27,11 +27,19 @@ def judge_pillow_image_is_wrong(image_input):
     try:
         if image_input.size[0] == 0 or (image_input.size[1] == 0):
             is_wrong = True
-            print("[data] image({}) is ({}, {}), jump.".format(type(image_input), image_input.size[0], image_input.size[1]))
+            print("<utils>[data] image({}) is ({}, {}), jump.".format(type(image_input), image_input.size[0], image_input.size[1]))
     except:
         print("[ERR][data] input less size object")
         is_wrong = True
     return is_wrong
+
+
+def rgb_open_check_pil(img_file):
+    pil_img = Image.open(img_file)
+    if str(pil_img.mode) != "RGB":
+        pil_img = pil_img.convert("RGB")
+        print("RGB Covered+ {}.".format(img_file))
+    return pil_img
 
 
 def network_choice(handle_choice=None):
@@ -47,6 +55,7 @@ def network_choice(handle_choice=None):
         net_name = handle_choice
     print("choose net :{}".format(net_name))
     return net
+
 
 
 class Utils:
@@ -94,6 +103,9 @@ class Utils:
                 padded_classes[i, :num_obj[i]] = gt_classes[i]
 
             return torch.stack(im_dataq, 0), torch.stack(im_datat, 0), padded_boxes, padded_classes, torch.stack(num_obj, 0)
+
+
+
 
 class ConsoleLogger(object):
 
@@ -174,6 +186,7 @@ def augment_img(img, boxes):
     """
 
     # img = np.array(img).astype(np.float32)
+    # TODO: mosica
     boxes = np.copy(boxes).astype(np.float32)
 
     for i in range(5):

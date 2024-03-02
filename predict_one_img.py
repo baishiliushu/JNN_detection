@@ -27,11 +27,11 @@ def parse_args():
 
 def main():
     # test()
-    args = parse_args()
-    Tester.test_one_OL(args.model_path, args.test_img_top_path, args.q_name, args.search_path, args.hist_option, args.rst_path, float(args.conf), float(args.nms))
+    # args = parse_args()
+    # Tester.test_one_OL(args.model_path, args.test_img_top_path, args.q_name, args.search_path, args.hist_option, args.rst_path, float(args.conf), float(args.nms))
 
-    Tester.test_on_cross_cats(args.model_path, args.q_name, args.test_img_top_path, args.search_path, args.rst_path, conf=float(args.conf), nms=float(args.nms))
-    # Tester.test_one_COCO()
+    # Tester.test_on_cross_cats(args.model_path, args.q_name, args.test_img_top_path, args.search_path, args.rst_path, conf=float(args.conf), nms=float(args.nms))
+    Tester.test_one_COCO()
 
 
 if __name__ == "__main__":

@@ -24,11 +24,18 @@ from config import Config
 
 
 class Trainer:
+    def __init__(self):
+        if not os.path.exists(Config.model_father_path):
+            try:
+                os.makedirs(Config.model_father_path)
+            except OSError:
+                print("[ERR]mkdir model_father_path {} failed.".format(Config.model_father_path))
+                exit(-1)
 
     @staticmethod
     def train():
         if Config.log_of_train:
-            logg_init_obj("log/console_train_{}.log".format(time.time()))
+            logg_init_obj("{}/console_train_{}.log".format(Config.model_father_path, time.time()))
         torch.cuda.manual_seed(123)
         print("Training process initialized...")
 
@@ -58,7 +65,11 @@ class Trainer:
         print("lr:     ", Config.lr)
         print("batch:  ", Config.batch_size)
         print("epochs: ", Config.epochs)
-
+        print("dataset:", Config.dataset)
+        print("network_type:", Config.network_type)
+        print("load_pretrianed_weight:", Config.load_pretrianed_weight)
+        print("anchors:", Config.anchors)
+        print("im_w:", Config.im_w)
         model = network_choice()
         print("DEV-BRANCH MARK loaded net :\n{}".format(model))
         lr = Config.lr

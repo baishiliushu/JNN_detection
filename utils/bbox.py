@@ -9,9 +9,10 @@ from __future__ import division
 from __future__ import print_function
 
 import torch
+from config import Config
 
 
-def box_ious(box1, box2, giou_flag=True):
+def box_ious(box1, box2, giou_flag=Config.use_giou):
     """
     Implement the intersection over union (IoU) between box1 and box2 (x1, y1, x2, y2)
 

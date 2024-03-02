@@ -6,20 +6,46 @@ import torchvision.datasets as dset
 
 import os
 import time
+import random
 import cv2
 import numpy as np
 from PIL import Image
 from PIL import ImageOps
 from config import Config
 
-from model.decoder import decode
+from model.decoder import decode, decode_cls
 from dataloaders.datasetJNN import DatasetJNN
 from dataloaders.datasetJNN_VOC import DatasetJNN_VOC
+from dataloaders.datasetJNN_VOC_cls import DatasetJNN_VOC_CLS
 from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
 from utils.utils import letterbox_image
 from utils.utils import network_choice
 from utils.utils import logg_init_obj
+
+STANDARD_COLORS = [(0, 0, 255), (0, 255, 0), (112, 220, 100)]
+
+
+def _tensor2cv2(input_tensor: torch.Tensor):
+    """
+    将tensor保存为cv2格式
+    :param input_tensor: 要保存的tensor
+
+    """
+    assert (len(input_tensor.shape) == 4 and input_tensor.shape[0] == 1)
+    # 复制一份
+    input_tensor = input_tensor.clone().detach()
+    # 到cpu
+    input_tensor = input_tensor.to(torch.device('cpu'))
+    # 反归一化
+    # input_tensor = unnormalize(input_tensor)
+    # 去掉批次维度
+    input_tensor = input_tensor.squeeze()
+    # 从[0,1]转化为[0,255]，再从CHW转为HWC，最后转为cv2
+    input_tensor = input_tensor.mul_(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).type(torch.uint8).numpy()
+    # RGB转BRG
+    input_tensor = cv2.cvtColor(input_tensor, cv2.COLOR_RGB2BGR)
+    return input_tensor
 
 def preprocess_byPIL_base(file_name, resize_w, resize_h, hist=False, letterbox=True, gray=False):
     q_im = Image.open(file_name)
@@ -422,9 +448,33 @@ class Tester:
                 # cv2.waitKey(0)
                 cv2.destroyAllWindows()
 
+    @staticmethod
+    def get_coco_qm_image(q_name):
+        q_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + q_name + ".jpg")
+        coco_dataset = dset.CocoDetection(Config.coco_dataset_dir,
+                                          Config.coco_dataset_dir + "annotations/instances_val2017.json")
+        # find image id and (first) annotation
+        q_index = None
+        q_ann_index = None
+        for id in coco_dataset.coco.imgs:
+            if coco_dataset.coco.imgs[id]['file_name'] == q_name + ".jpg":
+                q_index = id
+                break
+        for ann_id in coco_dataset.coco.anns:
+            if coco_dataset.coco.anns[ann_id]['image_id'] == q_index:
+                q_ann_index = ann_id
+                print("qname-> {}, q_index-> {}, q_ann_index->{},coco_dataset.coco.anns->\n{}"
+                      "".format(q_name, q_index, q_ann_index, coco_dataset.coco.anns[q_ann_index]))
+                break
+        qbox_xywh = coco_dataset.coco.anns[q_ann_index]['bbox']
+        qbox = [qbox_xywh[0], qbox_xywh[1], qbox_xywh[0] + qbox_xywh[2], qbox_xywh[1] + qbox_xywh[3]]
+        q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
+
+        q_im = q_im.resize((Config.imq_w, Config.imq_h))
+        return q_im
 
     @staticmethod
-    def test_one_COCO():
+    def test_one_COCO(use_coco=True):
         """ Tests a a pair of images """
 
         print("testing one image...")
@@ -439,70 +489,83 @@ class Tester:
         model.cuda()
         model.eval()
 
-        coco_dataset = dset.CocoDetection(Config.coco_dataset_dir,
-                                          Config.coco_dataset_dir + "annotations/instances_val2017.json")
-
-        # (3m1, 3m6), (rbc1, rbc43), hp(33971473, 70609284), blizzard(1, 6), gen_electric(7, 31), warner(10, 18)
+       # (3m1, 3m6), (rbc1, rbc43), hp(33971473, 70609284), blizzard(1, 6), gen_electric(7, 31), warner(10, 18)
         # goodyear(13, 20), airhawk(12, 1), gap(34, 36), levis(14, 30)
-        q_name = "000000024144"
-        t_name = "000000306700"
-        # /home/mmv/Documents/3.datasets / coco /
-        q_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + q_name + ".jpg")
-        t_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + t_name + ".jpg")
+        if use_coco:
+            q_name = "000000024144"   # 000000007574 000000010707 000000024144
+            t_name = "000000306700"   # 000000007574 000000010707  000000306700
+            q_im = Tester.get_coco_qm_image(q_name)
+            # /home/mmv/Documents/3.datasets / coco /
+            t_im = Image.open("{}val2017/".format(Config.coco_dataset_dir) + t_name + ".jpg")
+            t_im = t_im.resize((Config.im_w, Config.im_h))
+            qcv_im = np.array(q_im)
+            qcv_im = qcv_im[:, :, ::-1].copy()
+            cv_im = np.array(t_im)
+            cv_im = cv_im[:, :, ::-1].copy()
+            w, h = t_im.size[0], t_im.size[1]
+            im_infos = (w, h, q_name, t_name)
+            # To float tensors
+            q_im = torch.from_numpy(np.array(q_im)).float() / 255
+            t_im = torch.from_numpy(np.array(t_im)).float() / 255
+            img0 = q_im.permute(2, 0, 1)
+            img1 = t_im.permute(2, 0, 1)
+            img0 = torch.unsqueeze(img0, 0)
+            img1 = torch.unsqueeze(img1, 0)
+        else:
+            dataset_voc = DatasetJNN_VOC_CLS(Config.voc_dataset_dir, is_training=False)
 
-        # find image id and (first) annotation
-        for id in coco_dataset.coco.imgs:
-            if coco_dataset.coco.imgs[id]['file_name'] == q_name + ".jpg":
-                break
-        for ann_id in coco_dataset.coco.anns:
-            if coco_dataset.coco.anns[ann_id]['image_id'] == id:
-                print(coco_dataset.coco.anns[ann_id])
-                break
-        qbox = coco_dataset.coco.anns[ann_id]['bbox']
-        qbox = [qbox[0], qbox[1], qbox[0] + qbox[2], qbox[1] + qbox[3]]
-        q_im = q_im.crop((qbox[0], qbox[1], qbox[2], qbox[3]))
-
-        w, h = t_im.size[0], t_im.size[1]
-        im_infos = (w, h, q_name, t_name)
-
-        qcv_im = np.array(q_im)
-        qcv_im = qcv_im[:, :, ::-1].copy()
-        cv_im = np.array(t_im)
-        cv_im = cv_im[:, :, ::-1].copy()
-
-        q_im = q_im.resize((Config.imq_w, Config.imq_h))
-        t_im = t_im.resize((Config.im_w, Config.im_h))
-
-        # To float tensors
-        q_im = torch.from_numpy(np.array(q_im)).float() / 255
-        t_im = torch.from_numpy(np.array(t_im)).float() / 255
-        img0 = q_im.permute(2, 0, 1)
-        img1 = t_im.permute(2, 0, 1)
-        img0 = torch.unsqueeze(img0, 0)
-        img1 = torch.unsqueeze(img1, 0)
-
+            i_index = random.choice((0, len(dataset_voc.image_paths)))
+            # _data_iter = iter(dataset_voc)
+            # img0, img1, _, _,_ = next(_data_iter)
+            img0, img1, _, _, _ = dataset_voc.__getitem__(int(i_index))
+            img0 = torch.unsqueeze(img0, 0)
+            img1 = torch.unsqueeze(img1, 0)
+            qcv_im = _tensor2cv2(img0)
+            cv_im = _tensor2cv2(img1)
+        image = cv_im.copy()
+        im_infos = (cv_im.shape[1], cv_im.shape[0], "q_name", "t_name")
         with torch.no_grad():
             #
             img0, img1 = Variable(img0).cuda(), Variable(img1).cuda()
-
             model_output = model(img0, img1, [])
+
 
             im_info = {'width': im_infos[0], 'height': im_infos[1]}
             output = [item[0].data for item in model_output]
-
-            detections = decode(output, im_info, conf_threshold=Config.conf_thresh, nms_threshold=Config.nms_thresh)
+            detections = []
+            # Config.conf_thresh
+            if "cls" in Config.network_type:
+                detections = decode_cls(output, im_info, conf_threshold=0.3, nms_threshold=Config.nms_thresh)
+            else:
+                detections = decode(output, im_info, conf_threshold=0.3, nms_threshold=0.3)
 
             if len(detections) > 0:
 
                 for detection in detections:
                     start_pt = (int(detection[0].item()), int(detection[1].item()))
                     end_pt = (int(detection[2].item()), int(detection[3].item()))
-                    image = cv2.rectangle(cv_im, start_pt, end_pt, (0, 255, 0), 3)
+                    color_choose = STANDARD_COLORS[-1]
+                    if "cls" in Config.network_type:
+                        gt_id = int(detection[6].item())
+                        color_choose = STANDARD_COLORS[gt_id]
+                    image = cv2.rectangle(cv_im, start_pt, end_pt, color_choose, 3)
                     print(start_pt, end_pt)
+                    conf_ = "{:.4f}".format(detection[4].item())
+                    image = cv2.putText(image, conf_,
+                                        (min(int(detection[2].item() - 35), im_infos[0] - 3),
+                                         min(int(detection[3].item() - 3), im_infos[1] - 3)),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)
+                    if "cls" in Config.network_type:
+                        image = cv2.putText(image, "{}->{:.2f}".format(gt_id, detection[5].item()),
+                                            (max(int(detection[0].item()), 10),
+                                             max(int(detection[1].item() + 18), 6)),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)
 
-                cv2.imshow("q", qcv_im)
-                cv2.imshow("res", image)
-                cv2.waitKey()
+
+
             else:
                 print("No detctions found")
+            cv2.imshow("q", qcv_im)
+            cv2.imshow("res", image)
+            cv2.waitKey()
 
