@@ -75,7 +75,7 @@ def preprocess_byPIL_base(file_name, resize_w, resize_h, hist=False, letterbox=T
     img0 = torch.unsqueeze(img0, 0)
     return img0, cv_q_img
 
-def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=True, gray=False):
+def preprocess_byPIL(test_img_top_path, file_name, resize_w, resize_h, file_endless=".jpg", hist=False, letterbox=False, gray=False):
     img0, cv_q_img = preprocess_byPIL_base(os.path.join(test_img_top_path, file_name) + file_endless,
                                            resize_w, resize_h, hist , letterbox , gray)
     return img0, cv_q_img
@@ -241,20 +241,20 @@ class Tester:
 
 
     @staticmethod
-    def test_one_OL(model_path, test_img_top_path, q_name, search_path_top, hist_option, rst_path, conf, nums):
+    def test_one_OL(model_path, test_img_top_path, q_name, search_path_top, hist_option, rst_path, conf, nums, model_type = Config.network_type):
         """ Tests a a pair of images """
 
         print("testing one image...")
 
         #Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
-        model_type = "darknet19" # "no_config"
-        middle_name = ""
-        if model_type == "darknet19":
-            middle_name = "coco_voc199epoch/"
-        #
+        # model_type = "darknet19" # "no_config"
+        # middle_name = ""
+        # if model_type == "darknet19":
+        #     middle_name = "coco_voc199epoch/"
+        # #
         #model_path = "/home/leon/opt-exprements/expments/JNN_detection/check_points/{}model_best.pt".format(middle_name)
         # model_path = Config.best_model_path + Config.model_endless
-
+          # "darknet"
         model = network_choice(model_type)  # DarkJNN()
 
         checkpoint = torch.load(model_path)
@@ -271,8 +271,10 @@ class Tester:
         # t_name = "000000209530" #
         # test_img_top_path = '/home/leon/opt-exprements/expments/data_test/template_match/template_data/my_test_data/'
         # q_name = "xiaofangxiang"  # ['bin', 'miehuoqi', 'yaoshi', 'desk', 'yizi',  'shuiping']
+        letter_flag = False
+        gray_flag = False
         img0, cv_q_img = preprocess_byPIL(test_img_top_path, "{}".format(q_name), Config.imq_w, Config.imq_h,
-                                          letterbox=False)
+                                          letterbox=letter_flag, gray=gray_flag)
 
         #test_img_top_path = "/home/leon/opt-exprements/expments/data_test/template_match/match_data/{}/".format("dir-mosaic")  # q_name
         search_path = os.path.join(search_path_top, q_name)
@@ -292,7 +294,7 @@ class Tester:
             else:
                 sence_imgs[i] = os.path.join(search_path, s)
         if len(s_checks) > 0:
-            sence_imgs = s_checks
+            sence_imgs = s_checks  #expend
         for r in r_checks:
             if r in sence_imgs:
                 sence_imgs.remove(r)
@@ -300,11 +302,13 @@ class Tester:
         #conf = 0.3  # Config.conf_thresh
         #nums = 0.4  # Config.nms_th17_1703669057750530.jpgresh
         #rst_path = '/home/leon/opt-exprements/expments/data_test/template_match/own_rst_model_coco_e98'
+
         if not os.path.exists(rst_path):
             os.mkdir(rst_path)
-        rst_path = os.path.join(rst_path, q_name)
+        rst_path = os.path.join(rst_path, str(model_path).split("/")[-2])
         if hist_option:
             rst_path = rst_path + "_histed"
+        rst_path = "{}-{}_letter{}_gray{}_c{}".format(rst_path, q_name, letter_flag, gray_flag, conf)
         if not os.path.exists(rst_path):
             os.mkdir(rst_path)
         fount_sample_count = 0
@@ -323,19 +327,31 @@ class Tester:
                 print("model_output: {}".format(model_output))
                 im_info = {'width': im_infos[0], 'height': im_infos[1]}
                 output = [item[0].data for item in model_output]
-                detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nums)
+                if "cls" in model_type:
+                    detections = decode_cls(output, im_info, conf_threshold=conf, nms_threshold=nums, conf_loc=conf)
+                else:
+                    detections = decode(output, im_info, conf_threshold=conf, nms_threshold=nums)
                 test_t = get_milliseconds_timestamp() - test_t
                 print("detections: {}, using time:{}".format(detections, test_t))
                 highest_score = -1.0
                 if len(detections) > 0:
                     fount_sample_count = fount_sample_count + 1
                     for detection in detections:
+                        color_choose = STANDARD_COLORS[0]
+                        if "cls" in model_type:
+                            gt_id = int(detection[6].item())
+                            color_choose = STANDARD_COLORS[gt_id]
                         start_pt = (int(detection[0].item()), int(detection[1].item()))
                         end_pt = (int(detection[2].item()), int(detection[3].item()))
-                        image = cv2.rectangle(cv_im, start_pt, end_pt, (0, 255, 0), 2)
+                        image = cv2.rectangle(cv_im, start_pt, end_pt, color_choose, 2)
                         image = cv2.putText(image, "{:.4f}".format(detection[4].item()),
                                             (min(int(detection[2].item() - 25), im_infos[0] - 1), min(int(detection[3].item() + 15), im_infos[1] - 1)),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 122, 222), 1, cv2.LINE_AA)
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)
+                        if "cls" in model_type:
+                            image = cv2.putText(image, "{}:{:.2f}".format(gt_id, detection[5].item()),
+                                                (max(int(detection[0].item()), 10),
+                                                 max(int(detection[1].item() + 18), 6)),
+                                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)
                         if highest_score < detection[4].item():
                             highest_score = detection[4].item()
                         print(start_pt, end_pt)
@@ -362,7 +378,8 @@ class Tester:
                                                                                                   pet_found))
 
     @staticmethod
-    def test_on_cross_cats(model_file, query_cat_name:str, query_base_path, search_base_path, rst_base_path, hist_flag=False, conf=0.3, nms=0.1):
+    def test_on_cross_cats(model_file, query_cat_name:str, query_base_path, search_base_path, rst_base_path,
+                           hist_flag=False, conf=0.3, nms=0.1, model_type = Config.network_type):
         if Config.log_of_train:
             logg_init_obj("./log/console_test_{}.log".format(time.time()))
         model_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), model_file)
@@ -372,7 +389,8 @@ class Tester:
         if not (os.path.exists(search_base_path)):
             print("[ERR]search top path not exist:{}".format(search_base_path))
             exit(-2)
-        model = network_choice()  # DarkJNN()
+         #"darknet"
+        model = network_choice(model_type)  # DarkJNN()
         checkpoint = torch.load(model_file)
         model.load_state_dict(checkpoint['model'])
         model.cuda()
@@ -383,7 +401,7 @@ class Tester:
             os.mkdir(rst_base_path)
 
         img_q, cv_q_img = preprocess_byPIL(query_base_path, "{}".format(query_cat_name), Config.imq_w, Config.imq_h,
-                                           letterbox=True, gray=True)
+                                           letterbox=False, gray=False)
         for s in os.listdir(search_base_path):
             search_path = os.path.join(search_base_path, s)
             if not (os.path.exists(search_path)):
@@ -474,16 +492,16 @@ class Tester:
         return q_im
 
     @staticmethod
-    def test_one_COCO(use_coco=True):
+    def test_one_COCO(model_path, use_coco=True, model_type = Config.network_type):
         """ Tests a a pair of images """
 
         print("testing one image...")
 
         #Config.model_path = "/home/mmv/Documents/2.projects/JNN_detection/trained_models/dJNN_COCOsplit2/testmodel_last_split2.pt"
-        model_path = Config.best_model_path + Config.model_endless
-
-        model = network_choice()  # DarkJNN()
-
+        # model_path = Config.best_model_path + Config.model_endless
+        #Config.network_type
+        model = network_choice(model_type)  # DarkJNN()
+        model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), model_path)
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
         model.cuda()
@@ -534,8 +552,8 @@ class Tester:
             output = [item[0].data for item in model_output]
             detections = []
             # Config.conf_thresh
-            if "cls" in Config.network_type:
-                detections = decode_cls(output, im_info, conf_threshold=0.3, nms_threshold=Config.nms_thresh)
+            if "cls" in model_type:
+                detections = decode_cls(output, im_info, conf_threshold=0.7, nms_threshold=Config.nms_thresh, conf_loc=0.42)
             else:
                 detections = decode(output, im_info, conf_threshold=0.3, nms_threshold=0.3)
 
@@ -545,7 +563,7 @@ class Tester:
                     start_pt = (int(detection[0].item()), int(detection[1].item()))
                     end_pt = (int(detection[2].item()), int(detection[3].item()))
                     color_choose = STANDARD_COLORS[-1]
-                    if "cls" in Config.network_type:
+                    if "cls" in model_type:
                         gt_id = int(detection[6].item())
                         color_choose = STANDARD_COLORS[gt_id]
                     image = cv2.rectangle(cv_im, start_pt, end_pt, color_choose, 3)
@@ -555,8 +573,8 @@ class Tester:
                                         (min(int(detection[2].item() - 35), im_infos[0] - 3),
                                          min(int(detection[3].item() - 3), im_infos[1] - 3)),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)
-                    if "cls" in Config.network_type:
-                        image = cv2.putText(image, "{}->{:.2f}".format(gt_id, detection[5].item()),
+                    if "cls" in model_type:
+                        image = cv2.putText(image, "{}:{:.2f}".format(gt_id, detection[5].item()),
                                             (max(int(detection[0].item()), 10),
                                              max(int(detection[1].item() + 18), 6)),
                                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_choose, 1, cv2.LINE_AA)

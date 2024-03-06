@@ -112,7 +112,8 @@ class Trainer:
         break_counter = 0  # break after 20 epochs without loss improvement
 
         for epoch in range(starting_ep, Config.epochs):
-            print("##################NO.{} EPOCH [{},{})####################".format(epoch, starting_ep, Config.epochs))
+            print("##################NO.{} EPOCH [{},{}) data postive ({})####################"
+                  "".format(epoch, starting_ep, Config.epochs, dataset.found_convert_class_epoch))
             start_time = time.time()
 
             average_model_time = 0
@@ -226,7 +227,10 @@ class Trainer:
                 #break
 
             break_counter += 1
-
+            # if dataset.found_convert_class_epoch is True:
+            #     dataset.found_convert_class_epoch = False
+            # else:
+            #     dataset.found_convert_class_epoch = True
         print("best: ", best_epoch)
         plt.plot(counter, loss_history)
         plt.show()

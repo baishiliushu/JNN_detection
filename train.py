@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 from torch import optim
 
 from dataloaders.datasetJNN import DatasetJNN
-from dataloaders.datasetJNN_VOC import DatasetJNN_VOC
-from dataloaders.datasetJNN_COCO import DatasetJNN_COCO
+from dataloaders.datasetJNN_VOC_cls import DatasetJNN_VOC_CLS
+from dataloaders.datasetJNN_COCO_cls import DatasetJNN_COCO_CLS
 from dataloaders.datasetJNN_COCOsplit import DatasetJNN_COCOsplit
 from dataloaders.datasetJNN_VOC_abby import DatasetJNN_VOC_ABBY
 
@@ -25,12 +25,26 @@ from config import Config
 
 class Trainer:
     def __init__(self):
+        self.log_name = None
         if not os.path.exists(Config.model_father_path):
             try:
                 os.makedirs(Config.model_father_path)
             except OSError:
                 print("[ERR]mkdir model_father_path {} failed.".format(Config.model_father_path))
                 exit(-1)
+        if Config.log_of_train:
+            self.log_name = "{}/console_train_{}.log".format(Config.model_father_path, time.time())
+            logg_init_obj(self.log_name)
+        print("[Trian_no_cls]lr:     ", Config.lr)
+        print("batch: {}, num_workers:{} ".format(Config.batch_size, Config.num_workers))
+        print("epochs: ", Config.epochs)
+        print("dataset:", Config.dataset)
+        print("network_type:", Config.network_type)
+        print("load_pretrianed_weight:", Config.load_pretrianed_weight)
+        print("anchors:{}, giou:{}".format(Config.anchors, Config.use_giou))
+        print("size:{},{} ".format(Config.im_w, Config.im_h))
+        print("object_scale:{}, noobject_scale: {},class_scale: {}, coord_scale: {}"
+              "".format(Config.object_scale, Config.noobject_scale, Config.class_scale, Config.coord_scale))
 
     @staticmethod
     def train():
@@ -41,10 +55,10 @@ class Trainer:
 
         if Config.dataset == "VOC":
             print("dataset: ", Config.voc_dataset_dir)
-            dataset = DatasetJNN_VOC(Config.voc_dataset_dir)
+            dataset = DatasetJNN_VOC_CLS(Config.voc_dataset_dir)
         elif Config.dataset == "coco":
             print("dataset: ", Config.coco_dataset_dir)
-            dataset = DatasetJNN_COCO(Config.coco_dataset_dir)
+            dataset = DatasetJNN_COCO_CLS(Config.coco_dataset_dir)
         elif Config.dataset == "coco_split":
             print("dataset: ", Config.coco_dataset_dir, "--Split: ", Config.coco_split)
             dataset = DatasetJNN_COCOsplit(Config.coco_dataset_dir, Config.coco_split)
@@ -62,14 +76,7 @@ class Trainer:
                                       drop_last=True,
                                       collate_fn=Utils.custom_collate_fn)
 
-        print("lr:     ", Config.lr)
-        print("batch:  ", Config.batch_size)
-        print("epochs: ", Config.epochs)
-        print("dataset:", Config.dataset)
-        print("network_type:", Config.network_type)
-        print("load_pretrianed_weight:", Config.load_pretrianed_weight)
-        print("anchors:", Config.anchors)
-        print("im_w:", Config.im_w)
+
         model = network_choice()
         print("DEV-BRANCH MARK loaded net :\n{}".format(model))
         lr = Config.lr

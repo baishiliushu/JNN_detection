@@ -17,12 +17,13 @@ class DatasetJNN_VOC_CLS(Dataset):
         self.VOC_path = VOC_path
         self.is_training = is_training
         self.image_paths = []
-
-
+        self.found_convert_class_epoch = True
+        if 'cls' in Config.network_type:
+            self.using_cls_branch = True
         self.unseen_classes = ['cow', 'sheep', 'cat', 'aeroplane', 'person']
         #self.unseen_classes = ['bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'chair', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sofa', 'train', 'tvmonitor']
         # self.unseen_classes = ['cow', 'sheep', 'cat', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'chair', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sofa', 'train', 'tvmonitor']
-
+        print("[DATA INFO]\n{}".format(self.unseen_classes))
         if "2007" in year:
             f = open(self.VOC_path + "VOC2007/ImageSets/Main/" + mode + ".txt", "r")
             [self.image_paths.append(line.replace("\n", "")) for line in f.readlines()]
@@ -118,8 +119,12 @@ class DatasetJNN_VOC_CLS(Dataset):
             break
         # get target data
         # tpath_helper, t_name, tboxes, tclasses  = self.get_targets(qclass)
+
+        qclass_choice = True
+        if self.using_cls_branch is True:
+            qclass_choice = random.choices([True, False], [0.6, 0.4])[0]
         tpath_helper, t_name, tboxes, tclasses  = \
-            self._get_target_with_binary_all_index(qclass, must_fount_selected_classs=random.choices([True, False], [0.6, 0.4])[0])
+            self._get_target_with_binary_all_index(qclass, must_fount_selected_classs=qclass_choice)
 
         q_im = Image.open(self.VOC_path + qpath_helper + "JPEGImages/" + q_name + ".jpg")
         if judge_pillow_image_is_wrong(q_im):
@@ -156,7 +161,10 @@ class DatasetJNN_VOC_CLS(Dataset):
             boxes = torch.from_numpy(boxes)
             num_obj = torch.Tensor([boxes.size(0)]).long()
             class_values = torch.from_numpy(class_values)
-            return q_im, t_im, boxes, class_values, num_obj
+            if self.using_cls_branch is True:
+                return q_im, t_im, boxes, class_values, num_obj
+            else:
+                return q_im, t_im, boxes, num_obj
 
         else:
             w, h = t_im.size[0], t_im.size[1]

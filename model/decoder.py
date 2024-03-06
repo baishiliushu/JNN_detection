@@ -173,7 +173,7 @@ def decode(model_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
     return torch.cat(seq, dim=1)
 
 
-def filter_boxes_cls(boxes_pred, conf_pred, classes_pred, confidence_threshold=0.6):
+def filter_boxes_cls(boxes_pred, conf_pred, classes_pred, confidence_threshold=0.6, conf_location=0.6):
     """
         Filter boxes whose confidence is lower than a given threshold
 
@@ -199,9 +199,9 @@ def filter_boxes_cls(boxes_pred, conf_pred, classes_pred, confidence_threshold=0
     class_conf = classes_pred[0:]
 
     cls_index = (cls_max_conf > confidence_threshold).view(-1)
-    print("[_threshold]cls index found :{}".format(torch.sum(cls_index).item()))
-    pos_inds = (conf_pred > confidence_threshold).view(-1)
-    print("[_threshold]loc index found :{}".format(torch.sum(pos_inds).item()))
+    print("[_threshold]cls index found : {}({})".format(torch.sum(cls_index).item(), confidence_threshold))
+    pos_inds = (conf_pred > conf_location).view(-1)
+    print("[_threshold]loc index found :{}({})".format(torch.sum(pos_inds).item(), conf_location))
     pos_inds = pos_inds & cls_index
     # cls_conf = conf_pred * cls_max_conf
     # pos_inds = (cls_conf > confidence_threshold).view(-1)
@@ -217,7 +217,7 @@ def filter_boxes_cls(boxes_pred, conf_pred, classes_pred, confidence_threshold=0
     return filtered_boxes, filtered_conf, filtered_cls_max_conf, filtered_cls_max_id.float()
 
 
-def decode_cls(yolo_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
+def decode_cls(yolo_output, im_info, conf_threshold=0.6, nms_threshold=0.4, conf_loc=0.6):
     deltas = yolo_output[0].cpu()
     conf = yolo_output[1].cpu()
     classes = yolo_output[2].cpu()
@@ -226,7 +226,7 @@ def decode_cls(yolo_output, im_info, conf_threshold=0.6, nms_threshold=0.4):
     # apply deltas to anchors
     boxes = generate_prediction_boxes(deltas)
     # filter boxes on confidence score
-    boxes, conf, cls_max_conf, cls_max_id = filter_boxes_cls(boxes, conf, classes, conf_threshold)
+    boxes, conf, cls_max_conf, cls_max_id = filter_boxes_cls(boxes, conf, classes, conf_threshold, conf_loc)
     # no detection !
     if boxes.size(0) == 0:
         return []

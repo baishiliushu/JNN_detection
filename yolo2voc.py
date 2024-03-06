@@ -299,7 +299,8 @@ if __name__ == '__main__':
         save_path = data_path + 'Annos/ForTRAIN/'
         # write_imagesets_txt(data_path + 'Annos/TRAIN/')
         # check_endless()
-        clean_image_format_RBG()
+        # clean_image_format_RBG()
+        write_txt_from_xml_sub_path()
         exit(0)
         parseXmlFilse(image_path, anno_path, save_path)
         print("image nums: {}".format(images_nums))
