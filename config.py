@@ -5,7 +5,7 @@ class Config:
 
     base_project_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)) + os.path.sep + ".")
     continue_training = True
-    epochs = 121
+    epochs = 244  # 24 -4 = 20 * 2 = 40 + 204 = 244
     ####### Datasets
     dataset = "coco"  # {VOC, coco, coco_split, other, VOC_ABBY}
     # paths to [other] datasets

@@ -79,7 +79,10 @@ class Trainer:
                                       collate_fn=Utils.custom_collate_fn)
 
 
-        model = DarkJNNCls()
+        model = network_choice() # DarkJNNCls()
+        enabling_cls_mode = False
+        if "cls" in Config.network_type:
+            enabling_cls_mode = True
         print("trainCls loaded net :\n{}".format(model))
         time.sleep(3)
         lr = Config.lr
@@ -133,10 +136,14 @@ class Trainer:
 
                 if (i % 3000 == 0):
                    print(str(i) + "/" + str(len(train_dataloader)))  # progress
-
-                img0, img1, targets, classes_gt, num_obj = data
+                if "cls" in Config.network_type:
+                    img0, img1, targets, classes_gt, num_obj = data
                 # print("classes_gt:{}".format(classes_gt))
-                img0, img1, targets, classes_gt, num_obj = Variable(img0).cuda(), Variable(img1).cuda(), targets.cuda(), classes_gt.cuda(), num_obj.cuda()
+                    img0, img1, targets, classes_gt, num_obj = Variable(img0).cuda(), Variable(img1).cuda(), targets.cuda(), classes_gt.cuda(), num_obj.cuda()
+                else:
+                    img0, img1, targets, num_obj = data
+                    img0, img1, targets, num_obj = Variable(img0).cuda(), Variable(
+                        img1).cuda(), targets.cuda(), num_obj.cuda()
                 if judge_tensor_is_zero(targets):
                     print("[WARN]tensor data targets is all zero.")
                     continue
@@ -147,18 +154,24 @@ class Trainer:
                     print("[WARN]tensor data img1 is all zero.")
                     continue
                 model_timer = time.time()
-                loc_l, conf_l, cls_l = model(img0, img1, targets, classes_gt, num_obj, training=True)
+                if enabling_cls_mode:
+                    loc_l, conf_l, cls_l = model(img0, img1, targets, classes_gt, num_obj, training=True)
+                else:
+                    loc_l, conf_l = model(img0, img1, targets, num_obj, training=True)
                 # loss = loc_l.mean() + conf_l.mean()
                 loc_l_mean_handle = (loc_l / loc_l.numel()).sum()
                 conf_l_mean_handle = (conf_l / conf_l.numel()).sum()
-                cls_l_mean_handle = (cls_l / cls_l.numel()).sum()
+                cls_l_mean_handle = 0.0
+                if enabling_cls_mode:
+                    if math.isnan(cls_l):
+                        print("[ERR] cls_l_mean_handel is nan:{}".format(cls_l))
+                    cls_l_mean_handle = (cls_l / cls_l.numel()).sum()
                 loss = loc_l_mean_handle + conf_l_mean_handle + cls_l_mean_handle
                 if math.isnan(loc_l):
                     print("[ERR] loc_l_mean_handle is nan:{}".format(loc_l))
                 if math.isnan(conf_l):
                     print("[ERR] conf_l_mean_handle is nan:{}".format(conf_l))
-                if math.isnan(cls_l):
-                    print("[ERR] cls_l_mean_handel is nan:{}".format(cls_l))
+
                 model_timer = time.time() - model_timer
                 average_model_time += model_timer
 
@@ -172,7 +185,8 @@ class Trainer:
                 average_epoch_loss += loss
                 average_loc_loss += loc_l
                 average_conf_loss += conf_l
-                average_cls_loss += cls_l
+                if enabling_cls_mode:
+                    average_cls_loss += cls_l
                 if (i % 100 == 0):
                    print("[INFO] data batch {} : loss-sum {}, loss is {} = loc{} + conf{} + "
                          "cls{}".format(i, average_epoch_loss, loss, loc_l_mean_handle,  conf_l_mean_handle, cls_l_mean_handle))  # progress

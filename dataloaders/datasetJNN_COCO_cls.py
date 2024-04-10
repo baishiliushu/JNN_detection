@@ -152,7 +152,7 @@ class DatasetJNN_COCO_CLS(Dataset):
         same_class_choice = True
         if self.using_cls_branch is True:
             if self.found_convert_class_epoch is None:
-                same_class_choice = random.choices([True, False], [0.5, 0.5])[0]
+                same_class_choice = random.choices([True, True], [0.6, 0.4])[0]
         t_name, tboxes, tclasses = \
             self._get_target_with_binary_all_index(qclass, must_fount_selected_classs=same_class_choice)
         q_jpg_path = self.VOC_path + "train2017/" + q_name + ".jpg"
