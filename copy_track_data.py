@@ -2,6 +2,15 @@ import os
 import shutil
 import argparse
 
+"""
+RUBBY:/home/leon/mount_point_two/rubby-data-track/dl_0417
+DATASET_SAVE:/home/leon/mount_point_two/rubby-data-track/sorted_scene_0417
+DATE_ENDLESS:0417
+sit:track-1/20240417_data_track_1/21411022_2328|21411022_2329|21411022_2330
+#otdoor_road:track-2/20240417_data_track_1/21411023_0035|21411023_0036|21411023_0037
+otdoor_road:track-2/20240417_data_track_2/21411023_0039,track-2/20240417_data_track_3/21411023_0039|21411023_0040|21411023_0041
+"""
+
 def add_prefix_to_files(directory, prefix):
     # 遍历目录下的所有文件
     for filename in os.listdir(directory):
@@ -21,7 +30,7 @@ def cp_files_to_scene_dir(rubby_data_path, scene_dir):
     cam_path = os.path.join(rubby_data_path, "cam0")
     if not os.path.exists(cam_path):
         print(f"jpg path not exists {cam_path}")
-        return
+        exit(-1)
     for filename in os.listdir(cam_path):
         if filename.endswith('.jpg'):
             src_path = os.path.join(cam_path, filename)
@@ -37,7 +46,7 @@ def main():
     # 创建参数解析器
     parser = argparse.ArgumentParser(description="Add a prefix to all JPG files in a specified directory.")
     # 添加命令行参数
-    parser.add_argument("maps_txt", type=str, default="/home/leon/mount_point_two/rubby-data-track/dl-need-scp-0409/maps.txt", nargs="?", help="map txt for Replacing JPG files.")
+    parser.add_argument("maps_txt", type=str, default="/home/leon/mount_point_two/rubby-data-track/dl_0417/test.txt", nargs="?", help="map txt for Replacing JPG files.")
     # 解析命令行参数
     args = parser.parse_args()
     if args.maps_txt == "":
@@ -48,10 +57,13 @@ def main():
         exit(-1)
     with open(args.maps_txt, encoding="utf-8") as mf:
         lines = mf.readlines()
-        for l, line in enumerate(lines, 0):
+        for l, line in enumerate(lines, 1):
             line = line.strip()
             if len(line) == 0:
                 print(f"No.{l} is empty line.")
+                continue
+            if line[0] == "#":
+                print(f"No.{l} line is comment.")
                 continue
             contexts = line.split(":")
             if len(contexts) < 2:
@@ -61,7 +73,7 @@ def main():
                     if contexts[0] == kp:
                         key_values_conter[i] += contexts[1]
             else:
-                last_endless_by_line_count = max(l - 2, 0)
+                last_endless_by_line_count = max(l - 3, 0)
                 dst_dir_name = key_values_conter[2] + f"n{last_endless_by_line_count}=" + contexts[0]
                 dst_dir_name = os.path.join(key_values_conter[1], dst_dir_name)
                 if not os.path.exists(dst_dir_name):
